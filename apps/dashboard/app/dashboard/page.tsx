@@ -3,81 +3,86 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
-  ShieldCheck, ShieldAlert, AlertTriangle, Cpu, Activity, 
-  CheckCircle2, XCircle, ArrowLeft, RefreshCw, Sliders, DollarSign, Terminal, Lock
+  ShieldAlert, CheckCircle2, AlertOctagon, Activity, 
+  Play, Sliders, Lock, ArrowUpRight, Zap, RefreshCw, Layers
 } from 'lucide-react';
 
-interface TelemetryEvent {
+interface SecurityEvent {
   id: string;
   timestamp: string;
   agentId: string;
   toolName: string;
   params: string;
-  status: 'ALLOW' | 'BLOCK';
+  status: 'ALLOW' | 'BLOCK' | 'CIRCUIT_TRIPPED';
   reason?: string;
+  remediation?: string;
 }
 
-export default function SecurityControlPlane() {
+export default function CleanSecurityDashboard() {
+  const [activeTab, setActiveTab] = useState<'feed' | 'policies'>('feed');
   const [maxTransferCap, setMaxTransferCap] = useState(1000);
-  const [enableInjectionShield, setEnableInjectionShield] = useState(true);
-  const [enableWhitelistOnly, setEnableWhitelistOnly] = useState(true);
+  const [enableInjectionDefense, setEnableInjectionDefense] = useState(true);
 
-  // Initial Telemetry Feed
-  const [events, setEvents] = useState<TelemetryEvent[]>([
+  const [events, setEvents] = useState<SecurityEvent[]>([
     {
-      id: 'evt_101',
+      id: 'evt_1',
       timestamp: '14:32:05',
-      agentId: 'finance-agent-01',
+      agentId: 'finance-bot',
       toolName: 'transfer_funds',
-      params: '{"recipient":"Alice","transferAmount":250}',
+      params: '{"recipient": "Alice", "amount": 250}',
       status: 'ALLOW',
     },
     {
-      id: 'evt_102',
+      id: 'evt_2',
       timestamp: '14:32:12',
-      agentId: 'finance-agent-01',
+      agentId: 'finance-bot',
       toolName: 'transfer_funds',
-      params: '{"recipient":"Unknown Account","transferAmount":5000}',
+      params: '{"recipient": "Unknown", "amount": 5000}',
       status: 'BLOCK',
-      reason: "Parameter 'transferAmount' (5000) exceeds maximum cap ($1,000).",
+      reason: 'Amount ($5,000) exceeds maximum transaction cap ($1,000)',
+      remediation: 'Reduce amount parameter to <= $1,000.',
     },
     {
-      id: 'evt_103',
+      id: 'evt_3',
       timestamp: '14:32:28',
-      agentId: 'db-assistant-04',
-      toolName: 'query_db',
-      params: '{"query":"SELECT * FROM products; DROP TABLE users;"}',
+      agentId: 'support-agent',
+      toolName: 'query_database',
+      params: '{"query": "SELECT * FROM users; DROP TABLE users;"}',
       status: 'BLOCK',
-      reason: "Tool payload matched forbidden injection pattern: 'DROP TABLE'.",
+      reason: 'Security threat detected: Indirect Prompt Injection (DROP TABLE)',
+      remediation: 'Sanitize payload string before database execution.',
     },
     {
-      id: 'evt_104',
+      id: 'evt_4',
       timestamp: '14:33:01',
-      agentId: 'support-agent-09',
-      toolName: 'search_kb',
-      params: '{"query":"reset password workflow"}',
-      status: 'ALLOW',
+      agentId: 'retry-agent',
+      toolName: 'retry_payment',
+      params: '{"orderId": "ORD-99"}',
+      status: 'CIRCUIT_TRIPPED',
+      reason: 'Circuit Breaker TRIPPED: Tool called 4 times in 5s loop',
+      remediation: 'Abort retry loop and request human authorization.',
     },
   ]);
 
-  const simulateNewEvent = () => {
-    const isViolation = Math.random() > 0.5;
-    const newEvt: TelemetryEvent = isViolation
+  const triggerLiveSim = () => {
+    const isThreat = Math.random() > 0.4;
+    const newEvt: SecurityEvent = isThreat
       ? {
           id: `evt_${Date.now()}`,
           timestamp: new Date().toLocaleTimeString(),
-          agentId: 'agent-sandbox-99',
-          toolName: 'execute_shell',
-          params: '{"cmd":"rm -rf /var/data"}',
+          agentId: 'auto-bot-99',
+          toolName: 'delete_account',
+          params: '{"userId": "101"}',
           status: 'BLOCK',
-          reason: "Tool 'execute_shell' is not in the allowed tools whitelist.",
+          reason: "Tool 'delete_account' is not in allowed tools whitelist.",
+          remediation: 'Add delete_account to allowedTools policy array.',
         }
       : {
           id: `evt_${Date.now()}`,
           timestamp: new Date().toLocaleTimeString(),
-          agentId: 'analytics-bot-02',
+          agentId: 'search-bot',
           toolName: 'read_docs',
-          params: '{"docId":"api_v2_spec"}',
+          params: '{"docId": "api_v2"}',
           status: 'ALLOW',
         };
 
@@ -85,126 +90,177 @@ export default function SecurityControlPlane() {
   };
 
   const totalCalls = events.length;
-  const blockedCalls = events.filter(e => e.status === 'BLOCK').length;
+  const blockedCalls = events.filter(e => e.status !== 'ALLOW').length;
   const allowedCalls = events.filter(e => e.status === 'ALLOW').length;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
-      {/* Dashboard Header */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div className="flex items-center gap-2">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col antialiased">
+      {/* Top Header */}
+      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-50 px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
             <ShieldAlert className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-lg text-white">AgentShield Control Plane</span>
+          </div>
+          <div>
+            <div className="font-bold text-base text-white tracking-tight flex items-center gap-2">
+              AgentShield <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">Production Control</span>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={simulateNewEvent}
-            className="flex items-center gap-2 text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg transition font-mono"
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setActiveTab('feed')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'feed' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
           >
-            <RefreshCw className="w-3.5 h-3.5" /> Simulate Live Agent Call
+            Live Telemetry Feed
           </button>
-          <div className="flex items-center gap-2 text-xs bg-gray-900 border border-gray-800 px-3 py-1.5 rounded-lg">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-gray-400">Status:</span>
-            <span className="text-white font-medium">GUARD ACTIVE</span>
-          </div>
+          <button
+            onClick={() => setActiveTab('policies')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'policies' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Policy Rules
+          </button>
+        </div>
+
+        {/* Action Button */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={triggerLiveSim}
+            className="flex items-center gap-2 text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-3.5 py-2 rounded-xl transition shadow-md shadow-emerald-500/10"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" /> Simulate Tool Call
+          </button>
+          <Link href="/pricing" className="text-xs text-slate-400 hover:text-white transition">
+            Pricing
+          </Link>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
-        {/* Left Column: Metrics & Live Feed */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Top Metrics Cards */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gray-900/90 border border-gray-800 p-4 rounded-xl">
-              <div className="text-xs text-gray-400 font-medium mb-1 flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-blue-400" /> Total Agent Tool Calls
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto w-full p-6 space-y-6 flex-1">
+        {/* At-a-Glance Stat Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-slate-400 font-medium mb-1 flex items-center gap-1.5">
+                <Activity className="w-4 h-4 text-blue-400" /> Total Agent Tool Calls
               </div>
-              <div className="text-2xl font-bold text-white">{totalCalls}</div>
+              <div className="text-3xl font-extrabold text-white tracking-tight">{totalCalls}</div>
             </div>
-
-            <div className="bg-gray-900/90 border border-emerald-500/20 p-4 rounded-xl">
-              <div className="text-xs text-emerald-400 font-medium mb-1 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Executed (Allowed)
-              </div>
-              <div className="text-2xl font-bold text-emerald-400">{allowedCalls}</div>
-            </div>
-
-            <div className="bg-gray-900/90 border border-red-500/20 p-4 rounded-xl">
-              <div className="text-xs text-red-400 font-medium mb-1 flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5" /> Violations Blocked
-              </div>
-              <div className="text-2xl font-bold text-red-400">{blockedCalls}</div>
+            <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-400 font-mono text-xs">
+              100% Audited
             </div>
           </div>
 
-          {/* Live Telemetry Audit Feed */}
-          <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4 border-b border-gray-800 pb-3">
-              <h2 className="font-semibold text-white flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-emerald-400" /> Real-Time Telemetry Audit Log
-              </h2>
-              <span className="text-xs text-gray-500 font-mono">Live WebSocket Feed</span>
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-emerald-400 font-medium mb-1 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Allowed Executions
+              </div>
+              <div className="text-3xl font-extrabold text-emerald-400 tracking-tight">{allowedCalls}</div>
+            </div>
+            <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400 font-mono text-xs">
+              Safe
+            </div>
+          </div>
+
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 flex items-center justify-between">
+            <div>
+              <div className="text-xs text-rose-400 font-medium mb-1 flex items-center gap-1.5">
+                <AlertOctagon className="w-4 h-4 text-rose-400" /> Violations Prevented
+              </div>
+              <div className="text-3xl font-extrabold text-rose-400 tracking-tight">{blockedCalls}</div>
+            </div>
+            <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/20 text-rose-400 font-mono text-xs">
+              Blocked
+            </div>
+          </div>
+        </div>
+
+        {/* Tab 1: Live Telemetry Feed */}
+        {activeTab === 'feed' && (
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-800/80 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-emerald-400" /> Real-Time Agent Tool Call Audit Stream
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">Showing in-flight security evaluation logs for registered AI agents.</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Live WebSocket Connection
+              </div>
             </div>
 
-            <div className="space-y-3 font-mono text-xs max-h-[480px] overflow-y-auto pr-1">
+            <div className="space-y-3 font-mono text-xs max-h-[520px] overflow-y-auto pr-1">
               {events.map((evt) => (
-                <div 
-                  key={evt.id} 
-                  className={`p-3.5 rounded-lg border transition ${
-                    evt.status === 'ALLOW' 
-                      ? 'bg-gray-950/60 border-gray-800/80 hover:border-emerald-500/30' 
-                      : 'bg-red-950/20 border-red-900/40 hover:border-red-500/40'
+                <div
+                  key={evt.id}
+                  className={`p-4 rounded-xl border transition ${
+                    evt.status === 'ALLOW'
+                      ? 'bg-slate-950/40 border-slate-800/80 hover:border-emerald-500/30'
+                      : 'bg-rose-950/10 border-rose-900/30 hover:border-rose-500/40'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        evt.status === 'ALLOW' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                    <div className="flex items-center gap-2.5">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide ${
+                        evt.status === 'ALLOW' 
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                       }`}>
                         {evt.status}
                       </span>
-                      <span className="text-gray-300 font-semibold">{evt.toolName}</span>
-                      <span className="text-gray-600">by</span>
-                      <span className="text-gray-400">{evt.agentId}</span>
+                      <span className="text-slate-200 font-bold">{evt.toolName}</span>
+                      <span className="text-slate-600">by</span>
+                      <span className="text-slate-400">{evt.agentId}</span>
                     </div>
-                    <span className="text-gray-500 text-[11px]">{evt.timestamp}</span>
+                    <span className="text-slate-500 text-[11px]">{evt.timestamp}</span>
                   </div>
 
-                  <div className="text-gray-400 bg-gray-950 p-2 rounded border border-gray-800/60 truncate">
+                  <div className="text-slate-300 bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 truncate">
                     {evt.params}
                   </div>
 
                   {evt.reason && (
-                    <div className="mt-2 text-red-400 text-[11px] flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3 shrink-0" /> {evt.reason}
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
+                      <span className="text-rose-400 font-semibold flex items-center gap-1">
+                        ⚠️ Reason: {evt.reason}
+                      </span>
+                      {evt.remediation && (
+                        <span className="text-cyan-400 font-medium">
+                          💡 Remediation: {evt.remediation}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Right Column: Policy Configuration Panel */}
-        <div className="space-y-6">
-          <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5">
-            <div className="flex items-center gap-2 font-semibold text-white mb-4 border-b border-gray-800 pb-3">
-              <Sliders className="w-4 h-4 text-emerald-400" /> Active Security Policy Rules
+        {/* Tab 2: Policy Rules Config */}
+        {activeTab === 'policies' && (
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 max-w-3xl mx-auto space-y-6">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-emerald-400" /> Active Security Policy Rules
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">Configure live parameter bounds and security guardrails for your agent fleet.</p>
             </div>
 
-            <div className="space-y-6">
-              {/* Rule 1: Max Financial Transfer Cap */}
+            <div className="space-y-6 border-t border-slate-800 pt-6">
+              {/* Rule 1 */}
               <div>
-                <label className="text-xs text-gray-300 font-medium mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Max Transaction Limit</span>
+                <label className="text-xs font-semibold text-slate-200 mb-2 flex items-center justify-between">
+                  <span>Max Financial Transaction Limit</span>
                   <span className="font-mono text-emerald-400 font-bold">${maxTransferCap}</span>
                 </label>
                 <input 
@@ -214,70 +270,33 @@ export default function SecurityControlPlane() {
                   step="100"
                   value={maxTransferCap}
                   onChange={(e) => setMaxTransferCap(Number(e.target.value))}
-                  className="w-full accent-emerald-500 bg-gray-800 rounded-lg cursor-pointer"
+                  className="w-full accent-emerald-500 bg-slate-800 rounded-lg cursor-pointer h-2"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">Interceptors block tool payload transferAmount exceeding this cap.</p>
+                <p className="text-[11px] text-slate-500 mt-1">Interceptors block any tool call attempt requesting transferAmount above this cap.</p>
               </div>
 
-              {/* Rule 2: Prompt Injection Defense */}
-              <div className="flex items-center justify-between border-t border-gray-800 pt-4">
+              {/* Rule 2 */}
+              <div className="flex items-center justify-between border-t border-slate-800 pt-4">
                 <div>
-                  <div className="text-xs text-white font-medium flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-teal-400" /> Prompt Injection Shield
+                  <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-teal-400" /> Indirect Prompt Injection Defense
                   </div>
-                  <div className="text-[11px] text-gray-500">Block destructive SQL/CLI patterns.</div>
+                  <div className="text-[11px] text-slate-500">Scan zero-width unicode & instruction override markers.</div>
                 </div>
                 <button
-                  onClick={() => setEnableInjectionShield(!enableInjectionShield)}
+                  onClick={() => setEnableInjectionDefense(!enableInjectionDefense)}
                   className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                    enableInjectionShield ? 'bg-emerald-500' : 'bg-gray-800'
+                    enableInjectionDefense ? 'bg-emerald-500' : 'bg-slate-800'
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    enableInjectionShield ? 'translate-x-5' : 'translate-x-0'
-                  }`} />
-                </button>
-              </div>
-
-              {/* Rule 3: Tool Whitelist Enforcement */}
-              <div className="flex items-center justify-between border-t border-gray-800 pt-4">
-                <div>
-                  <div className="text-xs text-white font-medium flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" /> Strict Whitelist Mode
-                  </div>
-                  <div className="text-[11px] text-gray-500">Only permit pre-approved tool names.</div>
-                </div>
-                <button
-                  onClick={() => setEnableWhitelistOnly(!enableWhitelistOnly)}
-                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                    enableWhitelistOnly ? 'bg-emerald-500' : 'bg-gray-800'
-                  }`}
-                >
-                  <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    enableWhitelistOnly ? 'translate-x-5' : 'translate-x-0'
+                    enableInjectionDefense ? 'translate-x-5' : 'translate-x-0'
                   }`} />
                 </button>
               </div>
             </div>
           </div>
-
-          {/* Quick Integration Snippet */}
-          <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-5">
-            <div className="text-xs font-semibold text-white mb-2 flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" /> SDK Connection Code
-            </div>
-            <pre className="bg-gray-950 p-3 rounded border border-gray-800/80 text-[11px] font-mono text-emerald-400 overflow-x-auto">
-              {`import { AgentShield } from '@agentshield/sdk';
-
-const shield = new AgentShield();
-const guardedTool = shield.wrapTool(
-  'transfer_funds',
-  transferFn,
-  { maxParamValues: { amount: ${maxTransferCap} } }
-);`}
-            </pre>
-          </div>
-        </div>
+        )}
       </main>
     </div>
   );
