@@ -1,14 +1,53 @@
 import { GuardrailPolicy, ToolCallRequest, EvaluationResult } from './types.js';
+import { CircuitBreaker } from './circuitBreaker.js';
+import { InjectionSanitizer } from './sanitizer.js';
 
 export class PolicyEvaluator {
   private callHistory: Map<string, number[]> = new Map();
   private sessionCosts: Map<string, number> = new Map();
+  private circuitBreaker = new CircuitBreaker();
 
   evaluate(request: ToolCallRequest, policy: GuardrailPolicy): EvaluationResult {
     const timestamp = new Date().toISOString();
     const sessionKey = request.sessionId || request.agentId || 'default-session';
 
-    // 1. Check Allowed Tools
+    // 1. Circuit Breaker Evaluation (Anti Death-Loop Protection)
+    if (policy.circuitBreaker) {
+      const cbCheck = this.circuitBreaker.check(sessionKey, request.toolName, request.params, policy.circuitBreaker);
+      if (cbCheck.tripped) {
+        return {
+          allowed: false,
+          reason: cbCheck.reason,
+          actionTaken: 'CIRCUIT_TRIPPED',
+          timestamp,
+          remediation: {
+            status: 'BLOCKED',
+            suggestedFix: 'Agent in retry loop. Abort current tool sequence and ask human for clarification.',
+          },
+        };
+      }
+    }
+
+    // 2. Indirect Prompt Injection & Zero-Width Unicode Sanitization
+    if (policy.enableInjectionSanitizer !== false) {
+      const payloadStr = JSON.stringify(request.params);
+      const sanitizeRes = InjectionSanitizer.inspect(payloadStr);
+
+      if (sanitizeRes.detected) {
+        return {
+          allowed: false,
+          reason: `Security Threat Detected: ${sanitizeRes.type} (${sanitizeRes.patternMatched}).`,
+          actionTaken: 'BLOCK',
+          timestamp,
+          remediation: {
+            status: 'BLOCKED',
+            suggestedFix: 'Sanitize input payload to remove prompt overrides or hidden unicode characters.',
+          },
+        };
+      }
+    }
+
+    // 3. Allowed Tools Check
     if (policy.allowedTools && policy.allowedTools.length > 0) {
       if (!policy.allowedTools.includes(request.toolName)) {
         return {
@@ -16,21 +55,29 @@ export class PolicyEvaluator {
           reason: `Tool '${request.toolName}' is not in the allowed tools list.`,
           actionTaken: 'BLOCK',
           timestamp,
+          remediation: {
+            status: 'BLOCKED',
+            suggestedFix: `Tool '${request.toolName}' is not authorized. Permitted tools: ${policy.allowedTools.join(', ')}.`,
+          },
         };
       }
     }
 
-    // 2. Check Forbidden Tools
+    // 4. Forbidden Tools Check
     if (policy.forbiddenTools && policy.forbiddenTools.includes(request.toolName)) {
       return {
         allowed: false,
         reason: `Tool '${request.toolName}' is explicitly forbidden by policy.`,
         actionTaken: 'BLOCK',
         timestamp,
+        remediation: {
+          status: 'BLOCKED',
+          suggestedFix: `Tool '${request.toolName}' is prohibited in production environment.`,
+        },
       };
     }
 
-    // 3. Required Parameter Fields Verification
+    // 5. Required Parameter Fields Verification
     if (policy.requiredFields) {
       for (const field of policy.requiredFields) {
         if (request.params[field] === undefined || request.params[field] === null) {
@@ -39,12 +86,16 @@ export class PolicyEvaluator {
             reason: `Missing required parameter field '${field}'.`,
             actionTaken: 'BLOCK',
             timestamp,
+            remediation: {
+              status: 'REQUIRES_REMEDIATION',
+              suggestedFix: `Provide required parameter '${field}' before invoking tool '${request.toolName}'.`,
+            },
           };
         }
       }
     }
 
-    // 4. Rate Limit Evaluation
+    // 6. Rate Limit Evaluation
     if (policy.rateLimit) {
       const now = Date.now();
       const oneMinuteAgo = now - 60000;
@@ -56,13 +107,17 @@ export class PolicyEvaluator {
           reason: `Rate limit exceeded: Max ${policy.rateLimit.maxCallsPerMinute} calls/min allowed.`,
           actionTaken: 'BLOCK',
           timestamp,
+          remediation: {
+            status: 'BLOCKED',
+            suggestedFix: `Wait 60 seconds before issuing further tool calls for session '${sessionKey}'.`,
+          },
         };
       }
       timestamps.push(now);
       this.callHistory.set(sessionKey, timestamps);
     }
 
-    // 5. Financial & Session Budget Cap Check
+    // 7. Financial & Session Budget Cap Check
     if (policy.maxCostPerSession && request.estimatedCost) {
       const currentCost = this.sessionCosts.get(sessionKey) || 0;
       const newCost = currentCost + request.estimatedCost;
@@ -73,12 +128,16 @@ export class PolicyEvaluator {
           reason: `Session cost threshold exceeded ($${newCost.toFixed(4)} > $${policy.maxCostPerSession.toFixed(4)} cap).`,
           actionTaken: 'BLOCK',
           timestamp,
+          remediation: {
+            status: 'BLOCKED',
+            suggestedFix: `Budget limit reached ($${policy.maxCostPerSession}). Request budget approval.`,
+          },
         };
       }
       this.sessionCosts.set(sessionKey, newCost);
     }
 
-    // 6. Parameter Bound Verification
+    // 8. Parameter Bound Verification
     if (policy.maxParamValues) {
       for (const [paramKey, maxValue] of Object.entries(policy.maxParamValues)) {
         const actualVal = request.params[paramKey];
@@ -88,58 +147,47 @@ export class PolicyEvaluator {
             reason: `Parameter '${paramKey}' value (${actualVal}) exceeds maximum allowed threshold (${maxValue}).`,
             actionTaken: 'BLOCK',
             timestamp,
+            remediation: {
+              status: 'REQUIRES_REMEDIATION',
+              suggestedFix: `Reduce '${paramKey}' parameter to <= ${maxValue}.`,
+              maxAllowedValue: maxValue,
+            },
           };
         }
       }
     }
 
-    // 7. Advanced Prompt Injection Heuristics (Base64 & SQL/CLI Injection)
+    // 9. Forbidden String/Regex Pattern Checks
     if (policy.forbiddenPatterns) {
       const paramStr = JSON.stringify(request.params);
-
-      // Check raw patterns
       for (const pattern of policy.forbiddenPatterns) {
         const regex = typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern;
         if (regex.test(paramStr)) {
           return {
             allowed: false,
-            reason: `Parameter payload matched forbidden injection pattern: '${pattern}'.`,
+            reason: `Parameter payload matched forbidden pattern: '${pattern}'.`,
             actionTaken: 'BLOCK',
             timestamp,
+            remediation: {
+              status: 'BLOCKED',
+              suggestedFix: `Remove forbidden pattern '${pattern}' from input payload.`,
+            },
           };
-        }
-      }
-
-      // Check Base64 encoded payload injections
-      const base64Regex = /([A-Za-z0-9+/]{8,}={0,2})/g;
-      let match;
-      while ((match = base64Regex.exec(paramStr)) !== null) {
-        try {
-          const decoded = Buffer.from(match[1], 'base64').toString('utf-8');
-          for (const pattern of policy.forbiddenPatterns) {
-            const regex = typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern;
-            if (regex.test(decoded)) {
-              return {
-                allowed: false,
-                reason: `Base64 decoded payload matched forbidden pattern: '${pattern}'.`,
-                actionTaken: 'BLOCK',
-                timestamp,
-              };
-            }
-          }
-        } catch {
-          // Ignored if not valid UTF8
         }
       }
     }
 
-    // 8. Approval Gate Check
+    // 10. Approval Gate Check
     if (policy.requireApproval) {
       return {
         allowed: false,
         reason: `Tool '${request.toolName}' requires human authorization prior to execution.`,
         actionTaken: 'REQUIRE_APPROVAL',
         timestamp,
+        remediation: {
+          status: 'BLOCKED',
+          suggestedFix: 'Request human authorization token.',
+        },
       };
     }
 

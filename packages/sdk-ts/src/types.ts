@@ -1,3 +1,5 @@
+import { CircuitBreakerConfig } from './circuitBreaker.js';
+
 export interface GuardrailPolicy {
   allowedTools?: string[];
   forbiddenTools?: string[];
@@ -9,8 +11,10 @@ export interface GuardrailPolicy {
   };
   requiredFields?: string[];
   webhookUrl?: string;
-  timeoutMs?: number; // Maximum allowed execution time in ms
-  maxCostPerSession?: number; // Maximum USD budget cap per session
+  timeoutMs?: number;               // Execution timeout in ms
+  maxCostPerSession?: number;        // Maximum USD session cost budget cap
+  circuitBreaker?: CircuitBreakerConfig; // Anti-death loop configuration
+  enableInjectionSanitizer?: boolean;   // Indirect prompt injection & zero-width check
 }
 
 export interface ToolCallRequest {
@@ -24,8 +28,13 @@ export interface ToolCallRequest {
 export interface EvaluationResult {
   allowed: boolean;
   reason?: string;
-  actionTaken: 'ALLOW' | 'BLOCK' | 'REQUIRE_APPROVAL';
+  actionTaken: 'ALLOW' | 'BLOCK' | 'REQUIRE_APPROVAL' | 'CIRCUIT_TRIPPED';
   timestamp: string;
+  remediation?: {
+    status: 'BLOCKED' | 'REQUIRES_REMEDIATION';
+    suggestedFix?: string;
+    maxAllowedValue?: number;
+  };
 }
 
 export interface AgentShieldConfig {
