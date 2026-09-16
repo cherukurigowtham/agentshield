@@ -1,57 +1,169 @@
-name: AgentShield CI/CD Pipeline
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+  GO_VERSION: '1.22'
+  JAVA_VERSION: '17'
+  DOTNET_VERSION: '8.0.x'
 
 jobs:
-  test-ts-sdk:
-    name: Test TypeScript SDK
+  typescript:
+    name: TypeScript SDK & Dashboard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - name: Install Root & SDK Dependencies
-        run: npm ci || npm install
-      - name: Build TypeScript SDK
-        run: npm --prefix packages/sdk-ts run build
-      - name: Run Enterprise Test Suite
-        run: node --test packages/sdk-ts/dist/evaluator.test.js packages/sdk-ts/dist/stress.test.js
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Upload TS coverage
+        uses: codecov/codecov-action@v3
+        with:
+          flags: typescript
 
-  test-py-sdk:
-    name: Test Python SDK
+  go:
+    name: Go SDK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: cd packages/sdk-go && go test -v ./...
+      - run: cd packages/gateway-grpc && go build -o agentshield-grpc-server .
+      - name: Upload Go coverage
+        uses: codecov/codecov-action@v3
+        with:
+          flags: go
+
+  java:
+    name: Java SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+      - run: cd packages/sdk-java && mvn test -q
+
+  dotnet:
+    name: .NET SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: cd packages/sdk-dotnet/src/AgentShield && dotnet build
+      - run: cd packages/sdk-dotnet/src/AgentShield && dotnet test
+
+  rust:
+    name: Rust SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - run: cd packages/sdk-rust && cargo build
+      - run: cd packages/sdk-rust && cargo test
+
+  python:
+    name: Python SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Python Test Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest build
-      - name: Run Python Parity Test Suite
-        run: |
-          PYTHONPATH=packages/sdk-py python packages/sdk-py/test_agentshield.py
+      - run: pip install -e packages/sdk-py
+      - run: python packages/sdk-py/test_agentshield.py
 
-  build-dashboard:
-    name: Build Next.js Dashboard App
+  cli:
+    name: CLI Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Use Node.js 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - name: Install Dashboard Dependencies
-        run: npm --prefix apps/dashboard install
-      - name: Compile Next.js Production Build
-        run: npm --prefix apps/dashboard run build
+      - run: npm ci
+      - run: npm run build
+      - run: node packages/cli/dist/index.js test-injection
+      - run: node packages/cli/dist/index.js eval -t test -p '{}' -P packages/policy-packs/policies/pci-dss.json
+
+  policy-packs:
+    name: Policy Packs Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: cd packages/policy-packs && npm ci && npm run build && node dist/validate.js
+
+  integrations:
+    name: Framework Integrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      # TypeScript integrations compile check
+
+  dashboard:
+    name: Next.js Dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: cd apps/dashboard && npm ci && npm run build
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prettier --check "**/*.{ts,tsx,json,md,yaml,yml}" --ignore-path .gitignore
+      - run: npx eslint packages/sdk-ts/src --ext .ts
+
+  summary:
+    name: Summary
+    needs: [typescript, go, java, dotnet, rust, python, cli, policy-packs, integrations, dashboard, lint]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if echo "${{ needs.typescript.result }},${{ needs.go.result }},${{ needs.java.result }},${{ needs.dotnet.result }},${{ needs.rust.result }},${{ needs.python.result }},${{ needs.cli.result }},${{ needs.policy-packs.result }},${{ needs.integrations.result }},${{ needs.dashboard.result }},${{ needs.lint.result }}" | grep -q "failure\|cancelled"; then
+            echo "❌ Some jobs failed"
+            exit 1
+          else
+            echo "✅ All CI checks passed"
+          fi

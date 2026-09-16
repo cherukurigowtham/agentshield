@@ -1,0 +1,194 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: set_version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
+
+  publish-npm:
+    name: Publish to npm
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Update package versions
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          npm version $VERSION --no-git-tag-version --workspaces
+      - name: Publish workspaces
+        run: |
+          cd packages/sdk-ts && npm publish --access public
+          cd packages/integrations/langchain && npm publish --access public
+          cd packages/integrations/crewai && npm publish --access public
+          cd packages/integrations/autogen && npm publish --access public
+          cd packages/integrations/llamaindex && npm publish --access public
+          cd packages/policy-packs && npm publish --access public
+          cd packages/gateway && npm publish --access public
+          cd packages/cli && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build twine
+      - name: Update version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" packages/sdk-py/pyproject.toml
+      - run: cd packages/sdk-py && python -m build
+      - run: twine upload packages/sdk-py/dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+
+  publish-go:
+    name: Publish Go Module
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Tag and push
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          git tag "sdk-go/v$VERSION"
+          git push origin "sdk-go/v$VERSION"
+      - run: cd packages/sdk-go && go mod tidy
+      - name: Verify module
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          go list -m github.com/agentshield/sdk-go@v$VERSION
+
+  publish-maven:
+    name: Publish to Maven Central
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+          server-id: ossrh
+          settings-path: ${{ github.workspace }}
+      - name: Update version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/<version>.*<\/version>/<version>$VERSION<\/version>/" packages/sdk-java/pom.xml
+      - run: cd packages/sdk-java && mvn clean deploy -DskipTests
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  publish-nuget:
+    name: Publish to NuGet
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Update version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" packages/sdk-dotnet/src/AgentShield/AgentShield.csproj
+      - run: cd packages/sdk-dotnet/src/AgentShield && dotnet pack -c Release -o ../../../../artifacts
+      - run: dotnet nuget push artifacts/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+  publish-cargo:
+    name: Publish to crates.io
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Update version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" packages/sdk-rust/Cargo.toml
+      - run: cd packages/sdk-rust && cargo login ${{ secrets.CRATES_IO_TOKEN }}
+      - run: cd packages/sdk-rust && cargo publish
+
+  create-release:
+    name: Create GitHub Release
+    needs: [publish-npm, publish-pypi, publish-go, publish-maven, publish-nuget, publish-cargo]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            git log --pretty=format:"- %s (%an)" $PREV_TAG..HEAD > changelog.md
+          else
+            git log --pretty=format:"- %s (%an)" > changelog.md
+          fi
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: AgentShield v${{ needs.version.outputs.version }}
+          body_path: changelog.md
+          draft: false
+          prerelease: false
