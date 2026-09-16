@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@agentshield/sdk": "file:../../packages/sdk-ts",
+    "@stripe/stripe-js": "^9.16.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.400.0",
     "next": "^14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "lucide-react": "^0.400.0",
-    "clsx": "^2.1.1",
+    "stripe": "^22.6.2",
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
