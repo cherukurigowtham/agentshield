@@ -1,8 +1,12 @@
-import React from 'react';
+'use client';
+
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, ShieldAlert, Zap, Building2, Terminal } from 'lucide-react';
+import { ArrowLeft, Check, ShieldAlert, Zap, Building2, Terminal, Loader2 } from 'lucide-react';
+import { redirectToCheckout } from '@/lib/stripe';
 
 export default function PricingPage() {
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
       {/* Navigation Header */}
@@ -72,9 +76,23 @@ export default function PricingPage() {
               <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Custom policy regex builder</li>
             </ul>
 
-            <Link href="/dashboard" className="w-full text-center py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs transition shadow-lg shadow-emerald-500/20">
-              Start 14-Day Free Trial
-            </Link>
+            <button
+              onClick={() => {
+                setLoadingPlan('pro');
+                redirectToCheckout('pro');
+              }}
+              disabled={loadingPlan === 'pro'}
+              className="w-full text-center py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loadingPlan === 'pro' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                'Start 14-Day Free Trial'
+              )}
+            </button>
           </div>
 
           {/* Enterprise Tier */}
@@ -93,8 +111,22 @@ export default function PricingPage() {
               <li className="flex items-center gap-2"><Check className="w-4 h-4 text-cyan-400" /> 99.99% Uptime SLA & 24/7 support</li>
             </ul>
 
-            <button className="w-full py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs transition">
-              Contact Sales
+            <button
+              onClick={() => {
+                setLoadingPlan('enterprise');
+                redirectToCheckout('enterprise');
+              }}
+              disabled={loadingPlan === 'enterprise'}
+              className="w-full py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-semibold text-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loadingPlan === 'enterprise' ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Redirecting...
+                </>
+              ) : (
+                'Contact Sales / Start Trial'
+              )}
             </button>
           </div>
         </div>

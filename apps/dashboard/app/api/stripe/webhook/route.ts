@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2026-08-26.dahlia',
 });
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -55,7 +55,11 @@ export async function POST(req: NextRequest) {
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
-        const userId = (invoice.subscription as Stripe.Subscription)?.metadata?.userId;
+        // subscription_id may be on the invoice or we can get it from the customer's subscriptions
+        const subscriptionId = (invoice as any).subscription || (invoice as any).subscription_id;
+        const userId = subscriptionId 
+          ? (await stripe.subscriptions.retrieve(subscriptionId)).metadata?.userId
+          : undefined;
         
         console.log(`⚠️ Payment failed for user ${userId}`);
         // TODO: Notify user, retry logic
