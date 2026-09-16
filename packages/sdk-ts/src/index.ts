@@ -10,4 +10,8 @@ export * from './astEngine.js';
 export * from './dagEngine.js';
 export * from './mitreMapper.js';
 export * from './adapters/openai.js';
+export * from './adapters/anthropic.js';
+export * from './adapters/mcp.js';
+export * from './adapters/langchain.js';
+
 
