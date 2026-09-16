@@ -1,17 +1,48 @@
 import { GuardrailPolicy, ToolCallRequest, EvaluationResult } from './types.js';
 import { CircuitBreaker } from './circuitBreaker.js';
 import { InjectionSanitizer } from './sanitizer.js';
+import { BloomFilterGuard } from './bloomFilter.js';
+import { ASTSandboxEngine } from './astEngine.js';
 
 export class PolicyEvaluator {
   private callHistory: Map<string, number[]> = new Map();
   private sessionCosts: Map<string, number> = new Map();
   private circuitBreaker = new CircuitBreaker();
+  private bloomFilter = new BloomFilterGuard(2048, 4);
+
+  constructor() {
+    // Seed Bloom Filter with known threat hashes
+    this.bloomFilter.add('DROP TABLE');
+    this.bloomFilter.add('DELETE FROM');
+    this.bloomFilter.add('rm -rf');
+    this.bloomFilter.add('[SYSTEM OVERRIDE]');
+    this.bloomFilter.add('DAN MODE');
+  }
 
   evaluate(request: ToolCallRequest, policy: GuardrailPolicy): EvaluationResult {
     const timestamp = new Date().toISOString();
     const sessionKey = request.sessionId || request.agentId || 'default-session';
+    const payloadStr = JSON.stringify(request.params);
 
-    // 1. Circuit Breaker Evaluation (Anti Death-Loop Protection)
+    // 1. O(1) Fast-Path Bloom Filter Pre-Scan (~0.0001ms)
+    if (this.bloomFilter.mightContain(payloadStr)) {
+      // Fast path hit -> Trigger deep AST & Injection Analysis
+      const astRes = ASTSandboxEngine.analyzeCodePayload(payloadStr);
+      if (astRes.dangerous) {
+        return {
+          allowed: false,
+          reason: astRes.reason,
+          actionTaken: 'BLOCK',
+          timestamp,
+          remediation: {
+            status: 'BLOCKED',
+            suggestedFix: 'Remove concatenated string exploits or dynamic eval() functions.',
+          },
+        };
+      }
+    }
+
+    // 2. Circuit Breaker Evaluation (Anti Death-Loop Protection)
     if (policy.circuitBreaker) {
       const cbCheck = this.circuitBreaker.check(sessionKey, request.toolName, request.params, policy.circuitBreaker);
       if (cbCheck.tripped) {
@@ -28,9 +59,8 @@ export class PolicyEvaluator {
       }
     }
 
-    // 2. Indirect Prompt Injection & Zero-Width Unicode Sanitization
+    // 3. Indirect Prompt Injection & Zero-Width Unicode Sanitization
     if (policy.enableInjectionSanitizer !== false) {
-      const payloadStr = JSON.stringify(request.params);
       const sanitizeRes = InjectionSanitizer.inspect(payloadStr);
 
       if (sanitizeRes.detected) {
@@ -47,7 +77,7 @@ export class PolicyEvaluator {
       }
     }
 
-    // 3. Allowed Tools Check
+    // 4. Allowed Tools Check
     if (policy.allowedTools && policy.allowedTools.length > 0) {
       if (!policy.allowedTools.includes(request.toolName)) {
         return {
@@ -63,7 +93,7 @@ export class PolicyEvaluator {
       }
     }
 
-    // 4. Forbidden Tools Check
+    // 5. Forbidden Tools Check
     if (policy.forbiddenTools && policy.forbiddenTools.includes(request.toolName)) {
       return {
         allowed: false,
@@ -77,7 +107,7 @@ export class PolicyEvaluator {
       };
     }
 
-    // 5. Required Parameter Fields Verification
+    // 6. Required Parameter Fields Verification
     if (policy.requiredFields) {
       for (const field of policy.requiredFields) {
         if (request.params[field] === undefined || request.params[field] === null) {
@@ -95,7 +125,7 @@ export class PolicyEvaluator {
       }
     }
 
-    // 6. Rate Limit Evaluation
+    // 7. Rate Limit Evaluation
     if (policy.rateLimit) {
       const now = Date.now();
       const oneMinuteAgo = now - 60000;
@@ -117,7 +147,7 @@ export class PolicyEvaluator {
       this.callHistory.set(sessionKey, timestamps);
     }
 
-    // 7. Financial & Session Budget Cap Check
+    // 8. Financial & Session Budget Cap Check
     if (policy.maxCostPerSession && request.estimatedCost) {
       const currentCost = this.sessionCosts.get(sessionKey) || 0;
       const newCost = currentCost + request.estimatedCost;
@@ -137,7 +167,7 @@ export class PolicyEvaluator {
       this.sessionCosts.set(sessionKey, newCost);
     }
 
-    // 8. Parameter Bound Verification
+    // 9. Parameter Bound Verification
     if (policy.maxParamValues) {
       for (const [paramKey, maxValue] of Object.entries(policy.maxParamValues)) {
         const actualVal = request.params[paramKey];
@@ -157,12 +187,11 @@ export class PolicyEvaluator {
       }
     }
 
-    // 9. Forbidden String/Regex Pattern Checks
+    // 10. Forbidden String/Regex Pattern Checks
     if (policy.forbiddenPatterns) {
-      const paramStr = JSON.stringify(request.params);
       for (const pattern of policy.forbiddenPatterns) {
         const regex = typeof pattern === 'string' ? new RegExp(pattern, 'i') : pattern;
-        if (regex.test(paramStr)) {
+        if (regex.test(payloadStr)) {
           return {
             allowed: false,
             reason: `Parameter payload matched forbidden pattern: '${pattern}'.`,
@@ -177,7 +206,7 @@ export class PolicyEvaluator {
       }
     }
 
-    // 10. Approval Gate Check
+    // 11. Approval Gate Check
     if (policy.requireApproval) {
       return {
         allowed: false,

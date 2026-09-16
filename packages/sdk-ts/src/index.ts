@@ -5,4 +5,7 @@ export * from './circuitBreaker.js';
 export * from './sanitizer.js';
 export * from './audit.js';
 export * from './store.js';
+export * from './bloomFilter.js';
+export * from './astEngine.js';
+export * from './dagEngine.js';
 export * from './adapters/openai.js';
