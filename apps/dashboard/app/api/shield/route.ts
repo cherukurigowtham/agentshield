@@ -1,18 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { AgentShield, GuardrailPolicy } from '@agentshield/sdk';
+
+const shieldEngine = new AgentShield();
 
 export interface UniversalShieldRequest {
   toolName: string;
   params: Record<string, any>;
-  policy?: {
-    allowedTools?: string[];
-    forbiddenTools?: string[];
-    maxParamValues?: Record<string, number>;
-    forbiddenPatterns?: string[];
-  };
+  policy?: GuardrailPolicy;
+  sessionId?: string;
+  agentId?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Control Plane Auth Gate (API Key check if configured)
+    const authHeader = req.headers.get('authorization');
+    const requiredApiKey = process.env.AGENTSHIELD_API_KEY;
+
+    if (requiredApiKey) {
+      if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== requiredApiKey) {
+        return NextResponse.json(
+          { allowed: false, reason: 'Unauthorized: Invalid or missing AgentShield API Key.' },
+          { status: 401 }
+        );
+      }
+    }
+
+    // 2. Parse Request Payload
     const body: UniversalShieldRequest = await req.json();
 
     if (!body.toolName || !body.params) {
@@ -22,66 +36,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { toolName, params, policy = {} } = body;
-    const timestamp = new Date().toISOString();
+    const { toolName, params, policy = {}, sessionId, agentId } = body;
 
-    // 1. Tool Whitelist Check
-    if (policy.allowedTools && policy.allowedTools.length > 0) {
-      if (!policy.allowedTools.includes(toolName)) {
-        return NextResponse.json({
-          allowed: false,
-          actionTaken: 'BLOCK',
-          reason: `Tool '${toolName}' is not in allowed tools list.`,
-          timestamp,
-        });
-      }
-    }
+    // 3. Delegate Evaluation directly to Core AgentShield Engine (Zero Duplication)
+    const result = shieldEngine.guard(
+      { toolName, params, sessionId, agentId },
+      policy
+    );
 
-    // 2. Forbidden Tools Check
-    if (policy.forbiddenTools && policy.forbiddenTools.includes(toolName)) {
-      return NextResponse.json({
-        allowed: false,
-        actionTaken: 'BLOCK',
-        reason: `Tool '${toolName}' is explicitly forbidden by policy.`,
-        timestamp,
-      });
-    }
-
-    // 3. Parameter Bound Check
-    if (policy.maxParamValues) {
-      for (const [paramKey, maxValue] of Object.entries(policy.maxParamValues)) {
-        const actualVal = params[paramKey];
-        if (typeof actualVal === 'number' && actualVal > maxValue) {
-          return NextResponse.json({
-            allowed: false,
-            actionTaken: 'BLOCK',
-            reason: `Parameter '${paramKey}' (${actualVal}) exceeds max allowed cap (${maxValue}).`,
-            remediation: { suggestedFix: `Reduce '${paramKey}' parameter to <= ${maxValue}.` },
-            timestamp,
-          });
-        }
-      }
-    }
-
-    // 4. Prompt Injection Scan
-    const payloadStr = JSON.stringify(params);
-    const injectionPatterns = policy.forbiddenPatterns || ['DROP TABLE', 'rm -rf', 'IGNORE PREVIOUS INSTRUCTIONS', '\\[SYSTEM OVERRIDE\\]'];
-    for (const pattern of injectionPatterns) {
-      if (new RegExp(pattern, 'i').test(payloadStr)) {
-        return NextResponse.json({
-          allowed: false,
-          actionTaken: 'BLOCK',
-          reason: `Payload matched forbidden injection pattern: '${pattern}'.`,
-          timestamp,
-        });
-      }
-    }
-
-    return NextResponse.json({
-      allowed: true,
-      actionTaken: 'ALLOW',
-      timestamp,
-    });
+    return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json(
       { allowed: false, error: error.message },

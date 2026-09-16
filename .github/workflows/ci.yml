@@ -1,0 +1,57 @@
+name: AgentShield CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-ts-sdk:
+    name: Test TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install Root & SDK Dependencies
+        run: npm ci || npm install
+      - name: Build TypeScript SDK
+        run: npm --prefix packages/sdk-ts run build
+      - name: Run Enterprise Test Suite
+        run: node --test packages/sdk-ts/dist/evaluator.test.js packages/sdk-ts/dist/stress.test.js
+
+  test-py-sdk:
+    name: Test Python SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest build
+      - name: Run Python Parity Test Suite
+        run: |
+          PYTHONPATH=packages/sdk-py python packages/sdk-py/test_agentshield.py
+
+  build-dashboard:
+    name: Build Next.js Dashboard App
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install Dashboard Dependencies
+        run: npm --prefix apps/dashboard install
+      - name: Compile Next.js Production Build
+        run: npm --prefix apps/dashboard run build
