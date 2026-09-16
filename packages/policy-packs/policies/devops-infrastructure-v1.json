@@ -1,0 +1,54 @@
+{
+  "$schema": "https://agentshield.dev/schemas/guardrail-policy.json",
+  "id": "devops-infrastructure-v1",
+  "name": "DevOps & Cloud Infrastructure Security",
+  "description": "Enterprise policy pack protecting DevOps agents from executing destructive CLI commands, unauthorized database operations, and privilege escalation.",
+  "version": "1.0.0",
+  "allowedTools": [
+    "view_cluster_status",
+    "get_deployment_logs",
+    "scale_replicas",
+    "run_healthcheck",
+    "restart_service",
+    "inspect_pod"
+  ],
+  "forbiddenTools": [
+    "delete_cluster",
+    "execute_root_shell",
+    "drop_database",
+    "purge_backups",
+    "export_production_secrets"
+  ],
+  "maxParamValues": {
+    "max_replicas": 20,
+    "cpu_limit_cores": 8,
+    "memory_limit_gb": 32
+  },
+  "forbiddenPatterns": [
+    "rm -rf",
+    "chmod 777",
+    "mkfs\\.",
+    "DROP DATABASE",
+    "DROP TABLE",
+    "kubectl delete namespace",
+    "aws s3 rb",
+    "gcloud projects delete",
+    "IGNORE ALL PREVIOUS INSTRUCTIONS"
+  ],
+  "requiredFields": [
+    "environment",
+    "operator_id",
+    "change_request_id"
+  ],
+  "rateLimit": {
+    "maxCallsPerMinute": 30
+  },
+  "maxCostPerSession": 500,
+  "circuitBreaker": {
+    "maxRepeatedCalls": 3,
+    "timeWindowMs": 10000
+  },
+  "enableInjectionSanitizer": true,
+  "timeoutMs": 30000,
+  "requireApproval": true
+}

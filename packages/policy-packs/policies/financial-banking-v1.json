@@ -1,0 +1,47 @@
+{
+  "$schema": "https://agentshield.dev/schemas/guardrail-policy.json",
+  "id": "financial-banking-v1",
+  "name": "Financial Banking & AML Security",
+  "description": "Policy pack enforcing PCI-DSS, Anti-Money Laundering (AML) caps, parameter limits, and mandatory human approval gates on financial transfers.",
+  "version": "1.0.0",
+  "allowedTools": [
+    "check_balance",
+    "get_transaction_history",
+    "initiate_wire_transfer",
+    "convert_currency",
+    "verify_account_holder"
+  ],
+  "forbiddenTools": [
+    "override_credit_limit",
+    "delete_audit_trail",
+    "bypass_kyc_verification",
+    "export_account_database"
+  ],
+  "maxParamValues": {
+    "transfer_amount": 1000,
+    "daily_transaction_limit": 5000
+  },
+  "forbiddenPatterns": [
+    "DROP TABLE",
+    "DELETE FROM",
+    "IGNORE PREVIOUS RULES",
+    "BYPASS AML CHECK",
+    "social security number"
+  ],
+  "requiredFields": [
+    "account_id",
+    "currency",
+    "transaction_purpose"
+  ],
+  "rateLimit": {
+    "maxCallsPerMinute": 15
+  },
+  "maxCostPerSession": 100,
+  "circuitBreaker": {
+    "maxRepeatedCalls": 2,
+    "timeWindowMs": 5000
+  },
+  "enableInjectionSanitizer": true,
+  "timeoutMs": 15000,
+  "requireApproval": true
+}
