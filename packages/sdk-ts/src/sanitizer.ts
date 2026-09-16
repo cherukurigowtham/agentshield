@@ -24,9 +24,12 @@ export class InjectionSanitizer {
   ];
 
   static inspect(payloadStr: string): InjectionSanitizeResult {
+    // Normalize escaped whitespace literals in JSON strings
+    const normalizedPayload = payloadStr.replace(/\\t|\\n|\\r/g, ' ');
+
     // 1. Check Zero-Width Unicode Characters (used to hide injections)
     const zeroWidthRegex = /[\u200B-\u200D\uFEFF]/;
-    if (zeroWidthRegex.test(payloadStr)) {
+    if (zeroWidthRegex.test(normalizedPayload)) {
       return {
         detected: true,
         type: 'ZERO_WIDTH_UNICODE',
@@ -36,7 +39,7 @@ export class InjectionSanitizer {
 
     // 2. Check Indirect Prompt Injection Patterns
     for (const pattern of this.INDIRECT_INJECTION_PATTERNS) {
-      if (pattern.test(payloadStr)) {
+      if (pattern.test(normalizedPayload)) {
         return {
           detected: true,
           type: 'INDIRECT_PROMPT_INJECTION',
@@ -47,7 +50,7 @@ export class InjectionSanitizer {
 
     // 3. Check Destructive Patterns
     for (const pattern of this.DESTRUCTIVE_PATTERNS) {
-      if (pattern.test(payloadStr)) {
+      if (pattern.test(normalizedPayload)) {
         return {
           detected: true,
           type: 'DESTRUCTIVE_PATTERN',
@@ -59,7 +62,7 @@ export class InjectionSanitizer {
     // 4. Base64 Obfuscation Inspection
     const base64Regex = /([A-Za-z0-9+/]{8,}={0,2})/g;
     let match;
-    while ((match = base64Regex.exec(payloadStr)) !== null) {
+    while ((match = base64Regex.exec(normalizedPayload)) !== null) {
       try {
         const decoded = Buffer.from(match[1], 'base64').toString('utf-8');
         for (const pattern of [...this.INDIRECT_INJECTION_PATTERNS, ...this.DESTRUCTIVE_PATTERNS]) {
