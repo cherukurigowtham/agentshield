@@ -1,0 +1,26 @@
+{
+  "name": "@agentshield/cli",
+  "version": "0.1.0",
+  "description": "Universal CLI for AgentShield - test policies, evaluate calls, manage configs",
+  "main": "dist/index.js",
+  "bin": {
+    "agentshield": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node dist/index.js --help"
+  },
+  "dependencies": {
+    "@agentshield/sdk": "file:../sdk-ts",
+    "commander": "^12.1.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": ["agentshield", "cli", "guardrails", "security"],
+  "license": "MIT"
+}

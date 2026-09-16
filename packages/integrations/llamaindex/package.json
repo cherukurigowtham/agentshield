@@ -1,0 +1,23 @@
+{
+  "name": "@agentshield/llamaindex",
+  "version": "0.1.0",
+  "description": "Official AgentShield integration for LlamaIndex",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc"
+  },
+  "peerDependencies": {
+    "@agentshield/sdk": ">=0.1.0"
+  },
+  "dependencies": {
+    "@agentshield/sdk": "file:../../sdk-ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": ["agentshield", "llamaindex", "guardrails", "ai-agents"],
+  "license": "MIT"
+}
