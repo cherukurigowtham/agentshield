@@ -12,12 +12,18 @@ export class ASTSandboxEngine {
     
     // 1. Detect String Concatenation Attacks (e.g., "DRO" + "P TAB" + "LE")
     const concatenatedStr = this.deconcatenateStrings(tokens);
-    if (/DROP\s+TABLE/i.test(concatenatedStr) || /DELETE\s+FROM/i.test(concatenatedStr) || /rm\s+-rf/i.test(concatenatedStr)) {
+    if (/DROP\s+TABLE/i.test(concatenatedStr) || 
+        /DELETE\s+FROM/i.test(concatenatedStr) || 
+        /TRUNCATE\s+TABLE/i.test(concatenatedStr) || 
+        /rm\s+-rf/i.test(concatenatedStr) || 
+        /chmod\s+777/i.test(concatenatedStr) || 
+        /SELECT\s+\*\s+FROM/i.test(concatenatedStr)) {
       return {
         dangerous: true,
         reason: `AST Tokenizer detected obfuscated concatenated command: '${concatenatedStr}'`,
       };
     }
+
 
     // 2. Detect Dynamic Function Execution Calls (eval, Function, exec, system)
     for (let i = 0; i < tokens.length; i++) {

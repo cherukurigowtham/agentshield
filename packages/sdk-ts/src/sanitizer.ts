@@ -10,7 +10,9 @@ export class InjectionSanitizer {
     /IGNORE\s+(ALL\s+)?PREVIOUS\s+(INSTRUCTIONS|GOALS|RULES)/i,
     /DISREGARD\s+PRIOR\s+(RULES|GOALS|INSTRUCTIONS)/i,
     /YOU\s+ARE\s+NOW\s+IN\s+DAN\s+MODE/i,
+    /UNRESTRICTED\s+(MODE|PROMPT)/i,
     /NEW\s+SYSTEM\s+PROMPT:/i,
+
     /ADMIN_OVERRIDE_KEY/i,
   ];
 
