@@ -9,6 +9,8 @@ export interface GuardrailPolicy {
   };
   requiredFields?: string[];
   webhookUrl?: string;
+  timeoutMs?: number; // Maximum allowed execution time in ms
+  maxCostPerSession?: number; // Maximum USD budget cap per session
 }
 
 export interface ToolCallRequest {
@@ -16,6 +18,7 @@ export interface ToolCallRequest {
   params: Record<string, any>;
   agentId?: string;
   sessionId?: string;
+  estimatedCost?: number;
 }
 
 export interface EvaluationResult {

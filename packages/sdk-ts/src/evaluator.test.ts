@@ -35,7 +35,7 @@ test('AgentShield - Destructive Injection Pattern Defense', () => {
     policy
   );
   assert.equal(maliciousPayload.allowed, false);
-  assert.match(maliciousPayload.reason!, /matched forbidden pattern/);
+  assert.match(maliciousPayload.reason!, /matched forbidden injection pattern/);
 });
 
 test('AgentShield - Required Fields Verification', () => {
@@ -48,4 +48,36 @@ test('AgentShield - Required Fields Verification', () => {
   const missingFieldCall = shield.guard({ toolName: 'pay', params: { amount: 50 } }, policy);
   assert.equal(missingFieldCall.allowed, false);
   assert.match(missingFieldCall.reason!, /Missing required parameter field 'recipient'/);
+});
+
+test('AgentShield - Base64 Encoded Injection Payload Defense', () => {
+  const shield = new AgentShield();
+  const policy = { forbiddenPatterns: ['DROP TABLE'] };
+  
+  // "DROP TABLE" encoded in Base64 is "RFJPUCBUQUJMRQ=="
+  const base64EncodedPayload = shield.guard(
+    { toolName: 'query_db', params: { payload: 'RFJPUCBUQUJMRQ==' } },
+    policy
+  );
+  assert.equal(base64EncodedPayload.allowed, false);
+  assert.match(base64EncodedPayload.reason!, /Base64 decoded payload matched forbidden pattern/);
+});
+
+test('AgentShield - Execution Timeout Interceptor', async () => {
+  const shield = new AgentShield();
+  const policy = { timeoutMs: 50 };
+
+  const slowTool = async () => {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return 'Done';
+  };
+
+  const guardedSlowTool = await shield.wrapTool('slow_tool', slowTool, policy);
+
+  await assert.rejects(
+    async () => {
+      await guardedSlowTool({});
+    },
+    /Execution timed out after 50ms/
+  );
 });

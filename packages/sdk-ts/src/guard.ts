@@ -29,7 +29,7 @@ export class AgentShield {
   }
 
   /**
-   * Wraps an asynchronous tool function with AgentShield guardrail security.
+   * Wraps an asynchronous tool function with AgentShield guardrail security & execution timeout protection.
    */
   async wrapTool<TParams extends Record<string, any>, TResult>(
     toolName: string,
@@ -43,8 +43,31 @@ export class AgentShield {
         throw new Error(`[AgentShield Blocked] ${evalResult.reason}`);
       }
 
+      // Enforce Execution Timeout if configured
+      if (policy.timeoutMs && policy.timeoutMs > 0) {
+        return await this.executeWithTimeout(toolFn(params), policy.timeoutMs);
+      }
+
       return await toolFn(params);
     };
+  }
+
+  private executeWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`[AgentShield Timeout] Execution timed out after ${timeoutMs}ms.`));
+      }, timeoutMs);
+
+      promise
+        .then((res) => {
+          clearTimeout(timer);
+          resolve(res);
+        })
+        .catch((err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+    });
   }
 
   private async dispatchWebhookAlert(result: EvaluationResult, request: ToolCallRequest, webhookUrl?: string) {

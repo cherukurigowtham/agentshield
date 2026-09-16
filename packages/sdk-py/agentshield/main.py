@@ -1,9 +1,13 @@
 import functools
 import json
 import re
+import asyncio
 from typing import Dict, Any, List, Optional, Callable
 
 class AgentShieldViolation(Exception):
+    pass
+
+class AgentShieldTimeout(Exception):
     pass
 
 class AgentShield:
@@ -62,5 +66,24 @@ class AgentShield:
                 if not eval_res["allowed"]:
                     raise AgentShieldViolation(f"[AgentShield Blocked] {eval_res['reason']}")
                 return func(*args, **kwargs)
+            return wrapper
+        return decorator
+
+    def aguard(self, tool_name: str, policy: Dict[str, Any]):
+        def decorator(func):
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                eval_res = self.evaluate(tool_name, kwargs, policy)
+                if not eval_res["allowed"]:
+                    raise AgentShieldViolation(f"[AgentShield Blocked] {eval_res['reason']}")
+                
+                timeout_s = policy.get("timeoutSeconds")
+                if timeout_s and timeout_s > 0:
+                    try:
+                        return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout_s)
+                    except asyncio.TimeoutError:
+                        raise AgentShieldTimeout(f"[AgentShield Timeout] Async tool execution timed out after {timeout_s}s.")
+                
+                return await func(*args, **kwargs)
             return wrapper
         return decorator

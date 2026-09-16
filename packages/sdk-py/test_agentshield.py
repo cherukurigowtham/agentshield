@@ -1,3 +1,4 @@
+import asyncio
 from agentshield import AgentShield, AgentShieldViolation
 
 def test_python_guardrail():
@@ -23,7 +24,19 @@ def test_python_guardrail():
     except AgentShieldViolation as e:
         assert "exceeds max allowed cap" in str(e)
 
-    print("✅ All Python SDK tests passed successfully!")
+    # Async Guardrail Test
+    async def run_async_test():
+        @shield.aguard(tool_name="transfer_funds", policy=policy)
+        async def async_transfer(recipient: str, amount: float):
+            await asyncio.sleep(0.01)
+            return f"Async Sent ${amount} to {recipient}"
+
+        async_res = await async_transfer(recipient="Charlie", amount=250)
+        assert async_res == "Async Sent $250 to Charlie"
+
+    asyncio.run(run_async_test())
+
+    print("✅ All Sync & Async Python SDK tests passed successfully!")
 
 if __name__ == "__main__":
     test_python_guardrail()
