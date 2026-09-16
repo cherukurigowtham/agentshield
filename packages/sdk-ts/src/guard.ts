@@ -43,7 +43,6 @@ export class AgentShield {
         throw new Error(`[AgentShield Blocked] ${evalResult.reason}`);
       }
 
-      // Enforce Execution Timeout if configured
       if (policy.timeoutMs && policy.timeoutMs > 0) {
         return await this.executeWithTimeout(toolFn(params), policy.timeoutMs);
       }
@@ -110,4 +109,25 @@ export class AgentShield {
       // Non-blocking telemetry sync
     }
   }
+}
+
+// Global Default AgentShield Instance for 1-Line Universal Adoption
+const globalAgentShield = new AgentShield();
+
+/**
+ * Universal 1-Line Smart Shield Wrapper.
+ * Automatically wraps any async function with zero-config security guardrails!
+ * 
+ * Usage:
+ *   const safeFn = shield('transfer', transferFn, { maxParamValues: { amount: 1000 } });
+ */
+export function shield<TParams extends Record<string, any>, TResult>(
+  toolName: string,
+  toolFn: (params: TParams) => Promise<TResult>,
+  policy: GuardrailPolicy = { enableInjectionSanitizer: true }
+): (params: TParams) => Promise<TResult> {
+  return async (params: TParams): Promise<TResult> => {
+    const wrapped = await globalAgentShield.wrapTool(toolName, toolFn, policy);
+    return await wrapped(params);
+  };
 }
