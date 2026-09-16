@@ -1,0 +1,21 @@
+{
+  "name": "@agentshield/policy-packs",
+  "version": "0.1.0",
+  "description": "Curated security policy packs for AgentShield",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "policies"],
+  "scripts": {
+    "build": "tsc && cp -r policies dist/",
+    "validate": "node dist/validate.js"
+  },
+  "devDependencies": {
+    "@agentshield/sdk": "file:../sdk-ts",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1"
+  },
+  "keywords": ["agentshield", "policies", "guardrails", "compliance", "security"],
+  "license": "MIT"
+}

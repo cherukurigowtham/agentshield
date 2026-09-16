@@ -7,6 +7,6 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "test": "node --test"
+    "test": "node --test packages/sdk-ts/dist/**/*.test.js packages/integrations/langchain/dist/**/*.test.js packages/policy-packs/dist/**/*.test.js"
   }
 }

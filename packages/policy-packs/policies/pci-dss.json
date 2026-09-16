@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agentshield.dev/schemas/guardrail-policy.json",
+  "id": "pci-dss-v1",
+  "name": "PCI-DSS Financial Guardrails",
+  "description": "Policy pack for PCI-DSS compliant financial transaction handling. Enforces transaction limits, audit logging, and data protection.",
+  "version": "1.0.0",
+  "allowedTools": [
+    "transfer_funds",
+    "process_refund",
+    "charge_card",
+    "verify_payment",
+    "create_invoice",
+    "get_transaction_status"
+  ],
+  "forbiddenTools": [
+    "execute_sql",
+    "execute_shell",
+    "delete_database",
+    "modify_schema"
+  ],
+  "maxParamValues": {
+    "amount": 10000,
+    "refund_amount": 5000,
+    "card_limit": 25000
+  },
+  "forbiddenPatterns": [
+    "DROP TABLE",
+    "DELETE FROM",
+    "TRUNCATE TABLE",
+    "rm -rf",
+    "chmod 777",
+    "mkfs\\.",
+    "IGNORE ALL PREVIOUS INSTRUCTIONS",
+    "DISREGARD PRIOR RULES",
+    "\\[SYSTEM OVERRIDE\\]",
+    "ADMIN_OVERRIDE_KEY",
+    "NEW SYSTEM PROMPT:"
+  ],
+  "requiredFields": [
+    "recipient",
+    "amount",
+    "currency",
+    "transaction_id"
+  ],
+  "rateLimit": {
+    "maxCallsPerMinute": 30
+  },
+  "maxCostPerSession": 50000,
+  "circuitBreaker": {
+    "maxRepeatedCalls": 3,
+    "timeWindowMs": 5000
+  },
+  "enableInjectionSanitizer": true,
+  "timeoutMs": 30000,
+  "requireApproval": false
+}

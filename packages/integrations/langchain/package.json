@@ -1,0 +1,26 @@
+{
+  "name": "@agentshield/langchain",
+  "version": "0.1.0",
+  "description": "Official AgentShield integration for LangChain / LangGraph",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=0.2.0",
+    "@agentshield/sdk": ">=0.1.0"
+  },
+  "dependencies": {
+    "@agentshield/sdk": "file:../../sdk-ts"
+  },
+  "devDependencies": {
+    "@langchain/core": "^0.2.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": ["agentshield", "langchain", "langgraph", "guardrails", "ai-agents"],
+  "license": "MIT"
+}
