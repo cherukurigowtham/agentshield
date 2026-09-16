@@ -1,0 +1,34 @@
+export interface GuardrailPolicy {
+  allowedTools?: string[];
+  forbiddenTools?: string[];
+  maxParamValues?: Record<string, number>;
+  forbiddenPatterns?: RegExp[] | string[];
+  requireApproval?: boolean;
+  rateLimit?: {
+    maxCallsPerMinute: number;
+  };
+  requiredFields?: string[];
+  webhookUrl?: string;
+}
+
+export interface ToolCallRequest {
+  toolName: string;
+  params: Record<string, any>;
+  agentId?: string;
+  sessionId?: string;
+}
+
+export interface EvaluationResult {
+  allowed: boolean;
+  reason?: string;
+  actionTaken: 'ALLOW' | 'BLOCK' | 'REQUIRE_APPROVAL';
+  timestamp: string;
+}
+
+export interface AgentShieldConfig {
+  apiKey?: string;
+  environment?: 'development' | 'production';
+  telemetryUrl?: string;
+  webhookUrl?: string;
+  onViolation?: (result: EvaluationResult, request: ToolCallRequest) => void;
+}

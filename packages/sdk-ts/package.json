@@ -1,0 +1,26 @@
+{
+  "name": "@agentshield/sdk",
+  "version": "0.1.0",
+  "description": "Deterministic security, guardrails, and governance OS for autonomous AI agents.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/**/*.test.js"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "guardrails",
+    "security",
+    "llm",
+    "governance",
+    "agentshield"
+  ],
+  "author": "AgentShield Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^7.0.2"
+  }
+}

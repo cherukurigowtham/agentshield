@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentshield-os"
+version = "0.1.0"
+description = "Deterministic Security, Guardrails, and Governance OS for Autonomous AI Agents in Python."
+readme = {file = "README.md", content-type = "text/markdown"}
+requires-python = ">=3.9"
+license = {text = "MIT"}
+keywords = ["ai", "agents", "security", "guardrails", "llm", "governance", "langchain", "llamaindex", "autogen"]
+authors = [
+  {name = "AgentShield Team", email = "support@agentshield.dev"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/agentshield/agentshield"
+Documentation = "https://github.com/agentshield/agentshield#readme"
+Repository = "https://github.com/agentshield/agentshield"
+"Bug Tracker" = "https://github.com/agentshield/agentshield/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0"]

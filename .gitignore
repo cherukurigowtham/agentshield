@@ -1,0 +1,23 @@
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.pypirc
+
+# Node dependencies & builds
+node_modules/
+dist/
+.next/
+out/
+
+# Python Virtual environments & cache
+__pycache__/
+*.pyc
+.venv/
+build/
+*.egg-info/
+
+# System files
+.DS_Store
