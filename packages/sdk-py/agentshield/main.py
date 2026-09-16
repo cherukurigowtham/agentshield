@@ -169,7 +169,8 @@ class AgentShield:
         params: Dict[str, Any],
         policy: Dict[str, Any],
         session_id: Optional[str] = None,
-        agent_id: Optional[str] = None
+        agent_id: Optional[str] = None,
+        estimated_cost: Optional[float] = None
     ) -> Dict[str, Any]:
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ")
         session_key = session_id or agent_id or "default-session"
@@ -223,7 +224,78 @@ class AgentShield:
                     self._handle_violation_and_telemetry(tool_name, params, res, policy)
                     return res
 
-        # 6. Forbidden Patterns
+        # 6. Rate Limit
+        rate_limit = policy.get("rateLimit")
+        if rate_limit and rate_limit.get("maxCallsPerMinute"):
+            if not hasattr(self, '_rate_limit_tracker'):
+                self._rate_limit_tracker = {}
+            now = time.time()
+            window_start = now - 60
+            session_calls = self._rate_limit_tracker.get(session_key, [])
+            session_calls = [t for t in session_calls if t > window_start]
+            
+            if len(session_calls) >= rate_limit["maxCallsPerMinute"]:
+                reason = f"Rate limit exceeded: Max {rate_limit['maxCallsPerMinute']} calls/min allowed."
+                res = {
+                    "allowed": False,
+                    "actionTaken": "BLOCK",
+                    "reason": reason,
+                    "timestamp": timestamp
+                }
+                self._handle_violation_and_telemetry(tool_name, params, res, policy)
+                return res
+            
+            session_calls.append(now)
+            self._rate_limit_tracker[session_key] = session_calls
+
+        # 6. Rate Limit
+        rate_limit = policy.get("rateLimit")
+        if rate_limit and rate_limit.get("maxCallsPerMinute"):
+            if not hasattr(self, '_rate_limit_tracker'):
+                self._rate_limit_tracker = {}
+            now = time.time()
+            window_start = now - 60
+            session_calls = self._rate_limit_tracker.get(session_key, [])
+            print(f"   DEBUG: Raw session_calls for {session_key}: {session_calls}, policy has rateLimit: {rate_limit is not None}")
+            session_calls = [t for t in session_calls if t > window_start]
+            print(f"   DEBUG: Filtered session_calls: {session_calls}, count={len(session_calls)}")
+            
+            if len(session_calls) >= rate_limit["maxCallsPerMinute"]:
+                reason = f"Rate limit exceeded: Max {rate_limit['maxCallsPerMinute']} calls/min allowed."
+                res = {
+                    "allowed": False,
+                    "actionTaken": "BLOCK",
+                    "reason": reason,
+                    "timestamp": timestamp
+                }
+                self._handle_violation_and_telemetry(tool_name, params, res, policy)
+                return res
+            
+            session_calls.append(now)
+            self._rate_limit_tracker[session_key] = session_calls
+            print(f"   DEBUG: After append, session_calls: {session_calls}")
+
+        # 7. Budget Cap
+        if estimated_cost is not None and policy.get("maxCostPerSession"):
+            session_cost = getattr(self, '_session_costs', {}).get(session_key, 0.0)
+            new_cost = session_cost + estimated_cost
+            
+            if new_cost > policy["maxCostPerSession"]:
+                reason = f"Session cost threshold exceeded (${new_cost:.4f} > ${policy['maxCostPerSession']:.4f} cap)."
+                res = {
+                    "allowed": False,
+                    "actionTaken": "BLOCK",
+                    "reason": reason,
+                    "timestamp": timestamp
+                }
+                self._handle_violation_and_telemetry(tool_name, params, res, policy)
+                return res
+            
+            if not hasattr(self, '_session_costs'):
+                self._session_costs = {}
+            self._session_costs[session_key] = new_cost
+
+        # 8. Forbidden Patterns
         forbidden_patterns = policy.get("forbiddenPatterns", [])
         payload_str = json.dumps(params)
         for pattern in forbidden_patterns:
