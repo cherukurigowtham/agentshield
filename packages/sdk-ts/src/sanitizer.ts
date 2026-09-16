@@ -7,8 +7,8 @@ export interface InjectionSanitizeResult {
 export class InjectionSanitizer {
   private static INDIRECT_INJECTION_PATTERNS = [
     /\[SYSTEM\s*OVERRIDE\]/i,
-    /IGNORE\s+ALL\s+PREVIOUS\s+INSTRUCTIONS/i,
-    /DISREGARD\s+PRIOR\s+RULES/i,
+    /IGNORE\s+(ALL\s+)?PREVIOUS\s+(INSTRUCTIONS|GOALS|RULES)/i,
+    /DISREGARD\s+PRIOR\s+(RULES|GOALS|INSTRUCTIONS)/i,
     /YOU\s+ARE\s+NOW\s+IN\s+DAN\s+MODE/i,
     /NEW\s+SYSTEM\s+PROMPT:/i,
     /ADMIN_OVERRIDE_KEY/i,
