@@ -8,4 +8,6 @@ export * from './store.js';
 export * from './bloomFilter.js';
 export * from './astEngine.js';
 export * from './dagEngine.js';
+export * from './mitreMapper.js';
 export * from './adapters/openai.js';
+
