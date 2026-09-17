@@ -19,7 +19,7 @@ jobs:
   # STAGE 1: MONOREPO BUILD & COMPILATION
   # ==========================================================================
   build-core:
-    name: 🏗️ Build Core SDK & Monorepo Packages
+    name: 🏗️ Build Monorepo Packages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -29,22 +29,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-      - name: Build TypeScript Core SDK
+      - name: Install Monorepo Dependencies
+        run: npm install
+
+      - name: Compile All TypeScript Packages & Dashboard
         run: |
-          cd packages/sdk-ts
-          npm install
-          npm run build
+          npm --prefix packages/sdk-ts run build
+          npm --prefix packages/policy-packs run build
+          npm --prefix packages/cli run build
+          npm --prefix apps/dashboard run build
 
       - name: Upload Built SDK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sdk-ts-dist
-          path: packages/sdk-ts/dist/
+          name: monorepo-dist
+          path: |
+            packages/sdk-ts/dist/
+            packages/policy-packs/dist/
+            packages/cli/dist/
+            apps/dashboard/.next/
           retention-days: 1
 
   # ==========================================================================
-  # STAGE 2: PARALLEL VERIFICATION & TESTING (5 JOBS)
+  # STAGE 2: PARALLEL VERIFICATION & TESTING
   # ==========================================================================
   sdk-security-tests:
     name: 🛡️ SDK Core, OWASP & MITRE Red-Teaming Tests
@@ -55,21 +64,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-      - name: Download Built SDK Artifact
+      - name: Download Monorepo Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: sdk-ts-dist
-          path: packages/sdk-ts/dist/
+          name: monorepo-dist
 
-      - name: Install SDK dependencies
-        run: |
-          cd packages/sdk-ts
-          npm install
+      - name: Install Dependencies
+        run: npm install
 
       - name: Execute Full Automated Security & Red-Teaming Suite
-        run: |
-          node --test packages/sdk-ts/dist/evaluator.test.js packages/sdk-ts/dist/stress.test.js packages/sdk-ts/dist/owasp.test.js packages/sdk-ts/dist/mitre.test.js packages/sdk-ts/dist/adapters.test.js packages/sdk-ts/dist/redteam.test.js
+        run: node --test packages/sdk-ts/dist/evaluator.test.js packages/sdk-ts/dist/stress.test.js packages/sdk-ts/dist/owasp.test.js packages/sdk-ts/dist/mitre.test.js packages/sdk-ts/dist/adapters.test.js packages/sdk-ts/dist/redteam.test.js
 
   policy-packs:
     name: 📦 Industry Policy Packs Validation
@@ -80,19 +86,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-      - name: Download Built SDK Artifact
+      - name: Download Monorepo Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: sdk-ts-dist
-          path: packages/sdk-ts/dist/
+          name: monorepo-dist
 
-      - name: Build and Test Policy Packs
-        run: |
-          cd packages/policy-packs
-          npm install
-          npm run build
-          node --test dist/policy.test.js
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Validate Policy Packs
+        run: node --test packages/policy-packs/dist/policy.test.js
 
   cli-utility:
     name: 💻 Developer CLI Utility Tests
@@ -103,19 +108,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-      - name: Download Built SDK Artifact
+      - name: Download Monorepo Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: sdk-ts-dist
-          path: packages/sdk-ts/dist/
+          name: monorepo-dist
 
-      - name: Build and Test CLI Package
-        run: |
-          cd packages/cli
-          npm install
-          npm run build
-          node --test dist/cli.test.js
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Test CLI Package
+        run: node --test packages/cli/dist/cli.test.js
 
   python-sdk:
     name: 🐍 Python SDK (`agentshield-os`) Parity Tests
@@ -129,40 +133,18 @@ jobs:
       - name: Execute Python SDK Unit & Fuzzing Suite
         run: python packages/sdk-py/test_agentshield.py
 
-  nextjs-dashboard:
-    name: 📊 Next.js Control Plane App Build
-    needs: build-core
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Download Built SDK Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sdk-ts-dist
-          path: packages/sdk-ts/dist/
-
-      - name: Compile Next.js Control Plane Dashboard
-        run: |
-          cd apps/dashboard
-          npm install
-          npm run build
-
   # ==========================================================================
   # STAGE 3: MASTER RELEASE GATEWAY (CD TELEMETRY)
   # ==========================================================================
   release-gate:
     name: 🚀 Master CI/CD Release Readiness Gate
-    needs: [sdk-security-tests, policy-packs, cli-utility, python-sdk, nextjs-dashboard]
+    needs: [sdk-security-tests, policy-packs, cli-utility, python-sdk]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate Release Gate Criteria
         run: |
-          if echo "${{ needs.sdk-security-tests.result }},${{ needs.policy-packs.result }},${{ needs.cli-utility.result }},${{ needs.python-sdk.result }},${{ needs.nextjs-dashboard.result }}" | grep -q "failure\|cancelled"; then
+          if echo "${{ needs.sdk-security-tests.result }},${{ needs.policy-packs.result }},${{ needs.cli-utility.result }},${{ needs.python-sdk.result }}" | grep -q "failure\|cancelled"; then
             echo "❌ CI/CD Release Gate Failed"
             exit 1
           else
