@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   ShieldCheck, ShieldAlert, CheckCircle2, AlertOctagon, Activity, 
-  Play, Sliders, Lock, Zap, Layers, Code, Sparkles, BookOpen, Terminal
+  Play, Sliders, Lock, Zap, Layers, Code, Sparkles, BookOpen, Terminal, Key, Copy, Check, User, LogOut, Cpu
 } from 'lucide-react';
 import { AgentShield, GuardrailPolicy } from '@agentshield/sdk';
 
@@ -21,10 +22,31 @@ interface SecurityEvent {
 
 const shieldEngine = new AgentShield();
 
-export default function SpaciousSecurityDashboard() {
-  const [activeTab, setActiveTab] = useState<'feed' | 'playground' | 'policies'>('feed');
+export default function EnterpriseSecurityDashboard() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'feed' | 'playground' | 'keys' | 'policies'>('feed');
   const [maxTransferCap, setMaxTransferCap] = useState(1000);
   const [enableInjectionDefense, setEnableInjectionDefense] = useState(true);
+
+  // Authenticated user state
+  const user = {
+    name: 'Alex Chen',
+    email: 'alex@acme.ai',
+    orgName: 'Acme AI Inc.',
+    apiKey: 'ag_live_44a9d72291c89393282ad0ed23e6dff6',
+    tenantId: 'tenant_1789653550007_ce58b2c0',
+    plan: 'pro',
+    monthlyQuota: 1000000,
+    usageCount: 3,
+  };
+
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  const handleCopyKey = () => {
+    navigator.clipboard.writeText(user.apiKey);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
 
   // Playground state
   const [playToolName, setPlayToolName] = useState('transfer_funds');
@@ -41,7 +63,7 @@ export default function SpaciousSecurityDashboard() {
     {
       id: 'evt_1',
       timestamp: '14:32:05',
-      agentId: 'finance-bot-01',
+      agentId: 'acme-finance-bot',
       toolName: 'transfer_funds',
       params: '{"recipient": "Alice", "amount": 250}',
       status: 'ALLOW',
@@ -49,7 +71,7 @@ export default function SpaciousSecurityDashboard() {
     {
       id: 'evt_2',
       timestamp: '14:32:12',
-      agentId: 'finance-bot-01',
+      agentId: 'acme-finance-bot',
       toolName: 'transfer_funds',
       params: '{"recipient": "Unknown", "amount": 5000}',
       status: 'BLOCK',
@@ -59,7 +81,7 @@ export default function SpaciousSecurityDashboard() {
     {
       id: 'evt_3',
       timestamp: '14:32:28',
-      agentId: 'support-agent-02',
+      agentId: 'acme-support-bot',
       toolName: 'query_database',
       params: '{"query": "SELECT * FROM users; DROP TABLE users;"}',
       status: 'BLOCK',
@@ -69,7 +91,7 @@ export default function SpaciousSecurityDashboard() {
     {
       id: 'evt_4',
       timestamp: '14:33:01',
-      agentId: 'retry-agent-03',
+      agentId: 'acme-retry-bot',
       toolName: 'retry_payment',
       params: '{"orderId": "ORD-99"}',
       status: 'CIRCUIT_TRIPPED',
@@ -109,7 +131,7 @@ export default function SpaciousSecurityDashboard() {
       ? {
           id: `evt_${Date.now()}`,
           timestamp: new Date().toLocaleTimeString(),
-          agentId: 'agent-bot-99',
+          agentId: 'acme-auto-bot',
           toolName: 'delete_account',
           params: '{"userId": "101"}',
           status: 'BLOCK',
@@ -119,7 +141,7 @@ export default function SpaciousSecurityDashboard() {
       : {
           id: `evt_${Date.now()}`,
           timestamp: new Date().toLocaleTimeString(),
-          agentId: 'research-bot-04',
+          agentId: 'acme-search-bot',
           toolName: 'read_docs',
           params: '{"docId": "api_v2"}',
           status: 'ALLOW',
@@ -134,7 +156,7 @@ export default function SpaciousSecurityDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col antialiased">
-      {/* Spacious Navigation Header */}
+      {/* Top Header */}
       <header className="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur sticky top-0 z-50 px-8 h-20 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-4">
           <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl shadow-inner">
@@ -142,9 +164,9 @@ export default function SpaciousSecurityDashboard() {
           </div>
           <div>
             <div className="font-extrabold text-lg text-white tracking-tight flex items-center gap-3">
-              AgentShield <span className="text-xs font-mono font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Control Plane v0.1.0</span>
+              AgentShield <span className="text-xs font-mono font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Multi-Tenant OS v0.1.0</span>
             </div>
-            <div className="text-xs text-slate-400 mt-0.5">Real-time security governance for autonomous AI agents</div>
+            <div className="text-xs text-slate-400 mt-0.5">Real-time security governance & API quota metering</div>
           </div>
         </div>
 
@@ -152,23 +174,31 @@ export default function SpaciousSecurityDashboard() {
         <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800">
           <button
             onClick={() => setActiveTab('feed')}
-            className={`px-5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
               activeTab === 'feed' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Activity className="w-4 h-4" /> Live Telemetry
+            <Activity className="w-4 h-4" /> Telemetry Stream
           </button>
           <button
             onClick={() => setActiveTab('playground')}
-            className={`px-5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
               activeTab === 'playground' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Code className="w-4 h-4" /> Interactive Playground
+            <Code className="w-4 h-4" /> Playground
+          </button>
+          <button
+            onClick={() => setActiveTab('keys')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+              activeTab === 'keys' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Key className="w-4 h-4" /> API Keys & Metering
           </button>
           <button
             onClick={() => setActiveTab('policies')}
-            className={`px-5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 ${
               activeTab === 'policies' ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -176,20 +206,29 @@ export default function SpaciousSecurityDashboard() {
           </button>
         </div>
 
-        {/* Header Action Links */}
+        {/* User Account & Actions */}
         <div className="flex items-center gap-4">
           <button
             onClick={triggerLiveSim}
-            className="flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-4 py-2.5 rounded-xl border border-slate-700 transition"
+            className="flex items-center gap-2 text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition"
           >
             <Play className="w-3.5 h-3.5 fill-current" /> Simulate Event
           </button>
-          <Link href="/docs" className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4" /> Docs
-          </Link>
-          <Link href="/pricing" className="text-xs text-slate-400 hover:text-white transition">
-            Pricing
-          </Link>
+
+          {/* User Profile Capsule */}
+          <div className="flex items-center gap-3 pl-3 border-l border-slate-800">
+            <div className="text-right">
+              <div className="text-xs font-bold text-white leading-none">{user.name}</div>
+              <div className="text-[10px] font-mono text-emerald-400 mt-0.5">{user.orgName}</div>
+            </div>
+            <button
+              onClick={() => router.push('/login')}
+              title="Sign Out"
+              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400 transition border border-slate-800"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -203,17 +242,17 @@ export default function SpaciousSecurityDashboard() {
             </div>
             <div>
               <div className="text-sm font-bold text-white flex items-center gap-2">
-                System Status: <span className="text-emerald-400 flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span> Protected & Operational</span>
+                Account Status: <span className="text-emerald-400 flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span> Active ({user.orgName})</span>
               </div>
               <div className="text-xs text-slate-400 mt-1">
-                Zero-latency guardrail interceptors active across TypeScript, Python, and gRPC Sidecar Gateway nodes.
+                Multi-Tenant API Gateway active on <code className="text-emerald-300">http://localhost:8080</code> with isolated policy storage.
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs font-mono text-slate-400 bg-slate-950/60 px-4 py-2.5 rounded-xl border border-slate-800">
-            <span>Avg Latency: <strong className="text-emerald-400">0.0016ms</strong></span>
+            <span>Plan: <strong className="text-emerald-400 uppercase">{user.plan} Cloud</strong></span>
             <span>•</span>
-            <span>SOC2 Audit: <strong className="text-emerald-400">SHA-256 Enabled</strong></span>
+            <span>Usage: <strong className="text-emerald-400">{user.usageCount.toLocaleString()} / {user.monthlyQuota.toLocaleString()}</strong></span>
           </div>
         </div>
 
@@ -222,13 +261,13 @@ export default function SpaciousSecurityDashboard() {
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 flex items-center justify-between shadow-lg">
             <div className="space-y-2">
               <div className="text-xs font-medium text-slate-400 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-blue-400" /> Total Audited Tool Calls
+                <Activity className="w-4 h-4 text-blue-400" /> Audited Tool Calls
               </div>
               <div className="text-4xl font-extrabold text-white tracking-tight">{totalCalls}</div>
               <div className="text-[11px] text-slate-500">100% In-Process Evaluated</div>
             </div>
             <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-blue-400 font-mono text-xs font-bold">
-              +100%
+              Metered
             </div>
           </div>
 
@@ -265,7 +304,7 @@ export default function SpaciousSecurityDashboard() {
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-6">
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Layers className="w-5 h-5 text-emerald-400" /> Live Telemetry & Audit Stream
+                  <Layers className="w-5 h-5 text-emerald-400" /> Telemetry Stream ({user.orgName})
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">Real-time evaluation logs of agent tool calls across microservices.</p>
               </div>
@@ -322,7 +361,84 @@ export default function SpaciousSecurityDashboard() {
           </div>
         )}
 
-        {/* Tab 2: Interactive Playground */}
+        {/* Tab 2: API Keys & Usage Metering */}
+        {activeTab === 'keys' && (
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 space-y-8 shadow-xl">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Key className="w-5 h-5 text-emerald-400" /> API Keys & Usage Quota Metering
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">Manage isolated API credentials and monitor monthly request quotas for {user.orgName}.</p>
+            </div>
+
+            {/* API Key Box */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-white">Production API Key</div>
+                  <div className="text-[11px] text-slate-500">Include this key in the <code className="text-emerald-400">x-api-key</code> header for all Gateway requests.</div>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono border border-emerald-500/20 font-bold uppercase">
+                  {user.plan} PLAN ACTIVE
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  readOnly
+                  value={user.apiKey}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 font-mono text-xs text-emerald-400 outline-none"
+                />
+                <button
+                  onClick={handleCopyKey}
+                  className="flex items-center gap-2 px-4 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 whitespace-nowrap"
+                >
+                  {copiedKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedKey ? 'Copied!' : 'Copy Key'}
+                </button>
+              </div>
+            </div>
+
+            {/* Usage Quota Metering Progress Bar */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-white">Monthly API Request Quota Metering</span>
+                <span className="font-mono text-emerald-400 font-bold">
+                  {user.usageCount.toLocaleString()} / {user.monthlyQuota.toLocaleString()} Requests (0.0003%)
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-900 rounded-full h-3 overflow-hidden border border-slate-800">
+                <div 
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.max(1, (user.usageCount / user.monthlyQuota) * 100)}%` }} 
+                />
+              </div>
+
+              <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
+                <span>Billing Cycle Resets: 1st of next month</span>
+                <span>Gateway Endpoint: <code className="text-cyan-400">http://localhost:8080/v1/guard</code></span>
+              </div>
+            </div>
+
+            {/* Integration Snippet */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-3">
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-cyan-400" /> Multi-Tenant HTTP Authentication Snippet
+              </div>
+              <div className="bg-slate-900 p-4 rounded-xl font-mono text-xs text-slate-300 overflow-x-auto">
+                <span className="text-cyan-400">curl</span> -X POST http://localhost:8080/v1/guard \<br />
+                &nbsp;&nbsp;-H <span className="text-emerald-300">"x-api-key: {user.apiKey}"</span> \<br />
+                &nbsp;&nbsp;-H <span className="text-emerald-300">"Content-Type: application/json"</span> \<br />
+                &nbsp;&nbsp;-d <span className="text-emerald-300">'&#123;"toolName": "transfer_funds", "params": &#123;"amount": 250&#125;, "policy": &#123;"maxParamValues": &#123;"amount": 1000&#125;&#125;&#125;'</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Interactive Playground */}
         {activeTab === 'playground' && (
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 space-y-6 shadow-xl">
             <div>
@@ -417,12 +533,12 @@ export default function SpaciousSecurityDashboard() {
           </div>
         )}
 
-        {/* Tab 3: Policy Rules */}
+        {/* Tab 4: Policy Rules */}
         {activeTab === 'policies' && (
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 max-w-3xl mx-auto space-y-8 shadow-xl">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-emerald-400" /> Active Security Policy Rules
+                <Sliders className="w-5 h-5 text-emerald-400" /> Active Security Policy Rules ({user.orgName})
               </h2>
               <p className="text-xs text-slate-400 mt-1">Configure live parameter caps and security guardrails.</p>
             </div>

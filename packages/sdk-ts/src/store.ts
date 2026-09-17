@@ -9,12 +9,21 @@ export class PersistentStore {
     this.initStorage(customPath);
   }
 
+  private getDynamicModule(modName: string) {
+    if (typeof window !== 'undefined') return null;
+    try {
+      const dynamicRequire = typeof eval !== 'undefined' ? eval('require') : null;
+      return dynamicRequire ? dynamicRequire(modName) : null;
+    } catch {
+      return null;
+    }
+  }
+
   private initStorage(customPath?: string) {
     if (typeof window !== 'undefined') return;
     try {
-      // Universal Node check
-      const fs = typeof require !== 'undefined' ? require('fs') : null;
-      const path = typeof require !== 'undefined' ? require('path') : null;
+      const fs = this.getDynamicModule('fs');
+      const path = this.getDynamicModule('path');
       if (fs && path) {
         const dir = customPath ? path.dirname(customPath) : path.join(process.cwd(), '.agentshield_data');
         if (!fs.existsSync(dir)) {
@@ -34,7 +43,7 @@ export class PersistentStore {
       return;
     }
     try {
-      const fs = typeof require !== 'undefined' ? require('fs') : null;
+      const fs = this.getDynamicModule('fs');
       if (fs) {
         const records = this.loadRecords();
         records.push(record);
@@ -51,7 +60,7 @@ export class PersistentStore {
   loadRecords(): AuditRecord[] {
     if (typeof window !== 'undefined') return this.inMemoryStore;
     try {
-      const fs = typeof require !== 'undefined' ? require('fs') : null;
+      const fs = this.getDynamicModule('fs');
       if (fs && fs.existsSync(this.filePath)) {
         const content = fs.readFileSync(this.filePath, 'utf-8');
         return JSON.parse(content);
