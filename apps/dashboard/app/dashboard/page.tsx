@@ -4,10 +4,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
-  ShieldCheck, CheckCircle2, AlertOctagon, Activity, 
-  Play, Sliders, Lock, Zap, Layers, Code, Key, Copy, Check, LogOut, ArrowUpRight
+  ShieldCheck, Activity, Sliders, Lock, Key, Copy, Check, LogOut
 } from 'lucide-react';
-import { AgentShield, GuardrailPolicy } from '@agentshield/sdk';
 
 interface SecurityEvent {
   id: string;
@@ -20,11 +18,9 @@ interface SecurityEvent {
   remediation?: string;
 }
 
-const shieldEngine = new AgentShield();
-
 export default function EnterpriseSecurityDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'feed' | 'playground' | 'keys' | 'policies'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'keys' | 'policies'>('feed');
   const [maxTransferCap, setMaxTransferCap] = useState(1000);
   const [enableInjectionDefense, setEnableInjectionDefense] = useState(true);
 
@@ -48,18 +44,7 @@ export default function EnterpriseSecurityDashboard() {
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  // Playground state
-  const [playToolName, setPlayToolName] = useState('transfer_funds');
-  const [playParams, setPlayParams] = useState('{\n  "recipient": "ACC-998877",\n  "amount": 2500,\n  "note": "Invoice payment"\n}');
-  const [playPolicy, setPlayPolicy] = useState<GuardrailPolicy>({
-    allowedTools: ['transfer_funds', 'search_kb', 'check_balance'],
-    maxParamValues: { amount: 1000 },
-    enableInjectionSanitizer: true
-  });
-  const [playgroundResult, setPlaygroundResult] = useState<any>(null);
-  const [evalTimeMs, setEvalTimeMs] = useState<number | null>(null);
-
-  const [events, setEvents] = useState<SecurityEvent[]>([
+  const [events] = useState<SecurityEvent[]>([
     {
       id: 'evt_1',
       timestamp: '14:32:05',
@@ -100,56 +85,6 @@ export default function EnterpriseSecurityDashboard() {
     },
   ]);
 
-  const handleRunPlayground = () => {
-    let parsedParams = {};
-    try {
-      parsedParams = JSON.parse(playParams);
-    } catch {
-      setPlaygroundResult({
-        allowed: false,
-        reason: 'Invalid JSON syntax in tool parameters payload.',
-        actionTaken: 'BLOCK'
-      });
-      return;
-    }
-
-    const start = performance.now();
-    const res = shieldEngine.guard({
-      toolName: playToolName,
-      params: parsedParams,
-      sessionId: 'playground-session'
-    }, playPolicy);
-    const elapsed = performance.now() - start;
-
-    setEvalTimeMs(elapsed);
-    setPlaygroundResult(res);
-  };
-
-  const triggerLiveSim = () => {
-    const isThreat = Math.random() > 0.4;
-    const newEvt: SecurityEvent = isThreat
-      ? {
-          id: `evt_${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString(),
-          agentId: 'acme-auto-bot',
-          toolName: 'delete_account',
-          params: '{"userId": "101"}',
-          status: 'BLOCK',
-          reason: "Tool 'delete_account' is not in allowed tools whitelist.",
-          remediation: 'Add delete_account to allowedTools policy array.',
-        }
-      : {
-          id: `evt_${Date.now()}`,
-          timestamp: new Date().toLocaleTimeString(),
-          agentId: 'acme-search-bot',
-          toolName: 'read_docs',
-          params: '{"docId": "api_v2"}',
-          status: 'ALLOW',
-        };
-
-    setEvents(prev => [newEvt, ...prev]);
-  };
-
   const totalCalls = events.length;
   const blockedCalls = events.filter(e => e.status !== 'ALLOW').length;
   const allowedCalls = events.filter(e => e.status === 'ALLOW').length;
@@ -181,18 +116,7 @@ export default function EnterpriseSecurityDashboard() {
                   : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
               }`}
             >
-              <Activity className="w-4 h-4" /> Telemetry
-            </button>
-
-            <button
-              onClick={() => setActiveTab('playground')}
-              className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-2.5 ${
-                activeTab === 'playground'
-                  ? 'bg-slate-900 text-emerald-400 font-semibold'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
-              }`}
-            >
-              <Code className="w-4 h-4" /> Playground
+              <Activity className="w-4 h-4" /> Dashboard
             </button>
 
             <button
@@ -242,19 +166,9 @@ export default function EnterpriseSecurityDashboard() {
         {/* Top Header */}
         <header className="h-14 border-b border-slate-900 px-8 flex items-center justify-between sticky top-0 bg-slate-950/80 backdrop-blur z-30">
           <div className="text-xs font-bold text-slate-300">
-            {activeTab === 'feed' && 'Telemetry Stream'}
-            {activeTab === 'playground' && 'Guardrail Playground'}
+            {activeTab === 'feed' && 'Dashboard'}
             {activeTab === 'keys' && 'API Keys & Metered Usage'}
             {activeTab === 'policies' && 'Security Policies'}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={triggerLiveSim}
-              className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-semibold px-3 py-1.5 rounded-lg border border-emerald-500/20 transition flex items-center gap-1.5"
-            >
-              <Play className="w-3 h-3 fill-current" /> Simulate Event
-            </button>
           </div>
         </header>
 
@@ -278,7 +192,7 @@ export default function EnterpriseSecurityDashboard() {
             </div>
           </div>
 
-          {/* Tab 1: Telemetry */}
+          {/* Tab 1: Dashboard Feed */}
           {activeTab === 'feed' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -328,78 +242,7 @@ export default function EnterpriseSecurityDashboard() {
             </div>
           )}
 
-          {/* Tab 2: Playground */}
-          {activeTab === 'playground' && (
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-slate-300 block mb-1.5">Tool Name</label>
-                  <input
-                    type="text"
-                    value={playToolName}
-                    onChange={(e) => setPlayToolName(e.target.value)}
-                    className="w-full bg-slate-900/50 border border-slate-900 rounded-lg px-3.5 py-2 text-xs text-white font-mono focus:border-emerald-500/50 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-slate-300 block mb-1.5">Parameters (JSON)</label>
-                  <textarea
-                    rows={6}
-                    value={playParams}
-                    onChange={(e) => setPlayParams(e.target.value)}
-                    className="w-full bg-slate-900/50 border border-slate-900 rounded-lg p-3 text-xs text-emerald-400 font-mono focus:border-emerald-500/50 outline-none"
-                  />
-                </div>
-
-                <button
-                  onClick={handleRunPlayground}
-                  className="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition"
-                >
-                  Run Inspection
-                </button>
-              </div>
-
-              <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-5 flex flex-col justify-between font-mono text-xs">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-900 pb-3">
-                    <span className="text-slate-400 text-xs">Result</span>
-                    {evalTimeMs !== null && (
-                      <span className="text-emerald-400 text-[10px]">
-                        {evalTimeMs.toFixed(4)} ms
-                      </span>
-                    )}
-                  </div>
-
-                  {playgroundResult ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded ${
-                          playgroundResult.allowed 
-                            ? 'bg-emerald-500/10 text-emerald-400' 
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}>
-                          {playgroundResult.allowed ? 'ALLOWED' : 'BLOCKED'}
-                        </span>
-                      </div>
-
-                      {playgroundResult.reason && (
-                        <div className="p-3 bg-rose-950/20 rounded-lg text-rose-300 text-[11px]">
-                          {playgroundResult.reason}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-slate-600 text-center py-10 text-xs">
-                      Run inspection to view result.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tab 3: API Keys */}
+          {/* Tab 2: API Keys */}
           {activeTab === 'keys' && (
             <div className="space-y-6">
               <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-5 space-y-3">
@@ -441,7 +284,7 @@ export default function EnterpriseSecurityDashboard() {
             </div>
           )}
 
-          {/* Tab 4: Policies */}
+          {/* Tab 3: Policies */}
           {activeTab === 'policies' && (
             <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-6 space-y-6">
               <div className="space-y-2">
