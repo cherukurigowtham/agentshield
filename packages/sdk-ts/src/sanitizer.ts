@@ -12,22 +12,34 @@ export class InjectionSanitizer {
     /YOU\s+ARE\s+NOW\s+IN\s+DAN\s+MODE/i,
     /UNRESTRICTED\s+(MODE|PROMPT)/i,
     /NEW\s+SYSTEM\s+PROMPT:/i,
-
     /ADMIN_OVERRIDE_KEY/i,
   ];
 
   private static DESTRUCTIVE_PATTERNS = [
-    /DROP\s+TABLE/i,
-    /DELETE\s+FROM\s+[a-z_]+/i,
-    /TRUNCATE\s+TABLE/i,
+    /DROP(?:\/\*[\s\S]*?\*\/|\s)+TABLE/i,
+    /DELETE(?:\/\*[\s\S]*?\*\/|\s)+FROM(?:\/\*[\s\S]*?\*\/|\s)+[a-z_]+/i,
+    /TRUNCATE(?:\/\*[\s\S]*?\*\/|\s)+TABLE/i,
     /rm\s+-rf\s+/i,
     /chmod\s+777/i,
     /mkfs\./i,
   ];
 
   static inspect(payloadStr: string): InjectionSanitizeResult {
-    // Normalize escaped whitespace literals in JSON strings
-    const normalizedPayload = payloadStr.replace(/\\t|\\n|\\r/g, ' ');
+    let unescapedPayload = payloadStr;
+    
+    // 0. URL-Decode payload if encoded (%5BSYSTEM%20OVERRIDE%5D)
+    try {
+      if (unescapedPayload.includes('%')) {
+        unescapedPayload = decodeURIComponent(unescapedPayload);
+      }
+    } catch {
+      // Ignore if malformed URI component
+    }
+
+    // 0b. Unicode NFKC Normalization (converts full-width ＤＡＮ ＭＯＤＥ to DAN MODE)
+    const normalizedPayload = unescapedPayload
+      .normalize('NFKC')
+      .replace(/\\t|\\n|\\r/g, ' ');
 
     // 1. Check Zero-Width Unicode Characters (used to hide injections)
     const zeroWidthRegex = /[\u200B-\u200D\uFEFF]/;
@@ -66,7 +78,7 @@ export class InjectionSanitizer {
     let match;
     while ((match = base64Regex.exec(normalizedPayload)) !== null) {
       try {
-        const decoded = Buffer.from(match[1], 'base64').toString('utf-8');
+        const decoded = Buffer.from(match[1], 'base64').toString('utf-8').normalize('NFKC');
         for (const pattern of [...this.INDIRECT_INJECTION_PATTERNS, ...this.DESTRUCTIVE_PATTERNS]) {
           if (pattern.test(decoded)) {
             return {

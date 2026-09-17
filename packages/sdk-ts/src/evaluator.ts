@@ -130,6 +130,24 @@ export class PolicyEvaluator {
       const now = Date.now();
       const oneMinuteAgo = now - 60000;
       
+      // LRU Pruning: Prevent infinite memory leaks in long-running processes
+      if (this.callHistory.size > 2000) {
+        for (const [sKey, tStamps] of this.callHistory.entries()) {
+          const validStamps = tStamps.filter(t => t > oneMinuteAgo);
+          if (validStamps.length === 0) {
+            this.callHistory.delete(sKey);
+          } else {
+            this.callHistory.set(sKey, validStamps);
+          }
+        }
+        if (this.callHistory.size > 5000) {
+          const keysToDelete = Array.from(this.callHistory.keys()).slice(0, 2500);
+          for (const k of keysToDelete) {
+            this.callHistory.delete(k);
+          }
+        }
+      }
+
       const timestamps = (this.callHistory.get(sessionKey) || []).filter(t => t > oneMinuteAgo);
       if (timestamps.length >= policy.rateLimit.maxCallsPerMinute) {
         return {
@@ -149,6 +167,9 @@ export class PolicyEvaluator {
 
     // 8. Financial & Session Budget Cap Check
     if (policy.maxCostPerSession && request.estimatedCost) {
+      if (this.sessionCosts.size > 2000) {
+        this.sessionCosts.clear(); // Reset stale session cost map when threshold exceeded
+      }
       const currentCost = this.sessionCosts.get(sessionKey) || 0;
       const newCost = currentCost + request.estimatedCost;
 
