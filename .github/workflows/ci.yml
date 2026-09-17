@@ -13,6 +13,10 @@ concurrency:
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
+  STRIPE_SECRET_KEY: 'sk_test_dummy_key_for_ci_build'
+  STRIPE_WEBHOOK_SECRET: 'whsec_dummy_key_for_ci_build'
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_test_dummy_key_for_ci_build'
+  NEXT_PUBLIC_APP_URL: 'http://localhost:3000'
 
 jobs:
   # ==========================================================================
