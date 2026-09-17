@@ -1,0 +1,129 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AgentShield Gateway API",
+    "description": "High-performance HTTP sidecar gateway for deterministic AI agent guardrails, prompt injection detection, and rate limiting.",
+    "version": "0.1.0",
+    "contact": {
+      "name": "AgentShield Core Engineering",
+      "url": "https://github.com/cherukurigowtham/agentshield"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local Sidecar Gateway"
+    }
+  ],
+  "paths": {
+    "/v1/guard": {
+      "post": {
+        "summary": "Evaluate Tool Call",
+        "description": "Evaluates a single agent tool call against a specified guardrail policy in real-time.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool call allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$/ref": "#/components/schemas/GuardResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tool call blocked by AgentShield policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/guard/batch": {
+      "post": {
+        "summary": "Batch Evaluate Tool Calls",
+        "description": "Evaluates an array of tool call requests in a single HTTP request.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requests": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/GuardRequest"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch evaluation results"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "responses": {
+          "200": {
+            "description": "Gateway operational"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GuardRequest": {
+        "type": "object",
+        "required": ["toolName", "params", "policy"],
+        "properties": {
+          "toolName": { "type": "string", "example": "transfer_funds" },
+          "params": { "type": "object", "example": { "recipient": "Alice", "amount": 250 } },
+          "agentId": { "type": "string", "example": "finance-agent-1" },
+          "sessionId": { "type": "string", "example": "session-101" },
+          "estimatedCost": { "type": "number", "example": 0.05 },
+          "policy": {
+            "type": "object",
+            "properties": {
+              "allowedTools": { "type": "array", "items": { "type": "string" } },
+              "maxParamValues": { "type": "object" },
+              "enableInjectionSanitizer": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "GuardResponse": {
+        "type": "object",
+        "properties": {
+          "allowed": { "type": "boolean" },
+          "actionTaken": { "type": "string", "enum": ["ALLOW", "BLOCK", "REQUIRE_APPROVAL", "CIRCUIT_TRIPPED"] },
+          "reason": { "type": "string" },
+          "timestamp": { "type": "string" }
+        }
+      }
+    }
+  }
+}
