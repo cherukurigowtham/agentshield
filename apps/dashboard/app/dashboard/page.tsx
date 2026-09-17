@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
-  ShieldCheck, Activity, Sliders, Lock, Key, Copy, Check, LogOut
+  ShieldCheck, Activity, Sliders, Lock, Key, Copy, Check, LogOut, Layers, Sparkles
 } from 'lucide-react';
 
 interface SecurityEvent {
@@ -20,7 +20,7 @@ interface SecurityEvent {
 
 export default function EnterpriseSecurityDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'feed' | 'keys' | 'policies'>('feed');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'keys' | 'policies'>('dashboard');
   const [maxTransferCap, setMaxTransferCap] = useState(1000);
   const [enableInjectionDefense, setEnableInjectionDefense] = useState(true);
 
@@ -109,14 +109,25 @@ export default function EnterpriseSecurityDashboard() {
           {/* Minimal Navigation List */}
           <nav className="space-y-1">
             <button
-              onClick={() => setActiveTab('feed')}
+              onClick={() => setActiveTab('dashboard')}
               className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-2.5 ${
-                activeTab === 'feed'
+                activeTab === 'dashboard'
                   ? 'bg-slate-900 text-emerald-400 font-semibold'
                   : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
               }`}
             >
               <Activity className="w-4 h-4" /> Dashboard
+            </button>
+
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-2.5 ${
+                activeTab === 'logs'
+                  ? 'bg-slate-900 text-emerald-400 font-semibold'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+              }`}
+            >
+              <Layers className="w-4 h-4" /> Logs
             </button>
 
             <button
@@ -143,62 +154,89 @@ export default function EnterpriseSecurityDashboard() {
           </nav>
         </div>
 
-        {/* Minimal User Profile & Logout */}
-        <div className="pt-4 border-t border-slate-900 space-y-3">
-          <div className="flex items-center justify-between px-2">
-            <div className="truncate">
-              <div className="text-xs font-semibold text-white truncate">{user.name}</div>
-              <div className="text-[10px] text-slate-500 truncate">{user.orgName}</div>
-            </div>
-            <button
-              onClick={handleLogout}
-              title="Sign Out"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+        {/* Sidebar Footer */}
+        <div className="pt-4 border-t border-slate-900 text-[10px] text-slate-500 font-mono text-center">
+          AgentShield OS v0.1
         </div>
       </aside>
 
       {/* Main Workspace */}
       <div className="flex-1 flex flex-col min-w-0 bg-slate-950">
-        {/* Top Header */}
+        {/* Top Header Navbar */}
         <header className="h-14 border-b border-slate-900 px-8 flex items-center justify-between sticky top-0 bg-slate-950/80 backdrop-blur z-30">
           <div className="text-xs font-bold text-slate-300">
-            {activeTab === 'feed' && 'Dashboard'}
+            {activeTab === 'dashboard' && 'Dashboard Overview'}
+            {activeTab === 'logs' && 'Audit Logs'}
             {activeTab === 'keys' && 'API Keys & Metered Usage'}
             {activeTab === 'policies' && 'Security Policies'}
+          </div>
+
+          {/* User Name & Profile on Top Navbar */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-lg text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="font-semibold text-white">{user.name}</span>
+              <span className="text-slate-500 font-mono text-[10px]">({user.orgName})</span>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              title="Sign Out"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-lg text-xs font-medium transition"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Sign Out
+            </button>
           </div>
         </header>
 
         {/* Main Body */}
         <main className="p-8 max-w-6xl w-full mx-auto space-y-8 flex-1">
-          {/* Clean Metric Grid */}
-          <div className="grid grid-cols-3 gap-5">
-            <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-5 space-y-1">
-              <div className="text-xs font-medium text-slate-400">Total Tool Calls</div>
-              <div className="text-2xl font-bold text-white tracking-tight">{totalCalls}</div>
-            </div>
+          {/* Tab 1: Dashboard Overview */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              {/* Status Summary Banner */}
+              <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500/10 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white">System Status: Protected</div>
+                    <div className="text-[11px] text-slate-500">Multi-tenant Gateway active on http://localhost:8080</div>
+                  </div>
+                </div>
+                <div className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+                  {user.plan} Active
+                </div>
+              </div>
 
-            <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-5 space-y-1">
-              <div className="text-xs font-medium text-emerald-400">Allowed</div>
-              <div className="text-2xl font-bold text-emerald-400 tracking-tight">{allowedCalls}</div>
-            </div>
+              {/* Clean Metric Grid */}
+              <div className="grid grid-cols-3 gap-5">
+                <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-5 space-y-1">
+                  <div className="text-xs font-medium text-slate-400">Total Tool Calls</div>
+                  <div className="text-2xl font-bold text-white tracking-tight">{totalCalls}</div>
+                </div>
 
-            <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-5 space-y-1">
-              <div className="text-xs font-medium text-rose-400">Blocked</div>
-              <div className="text-2xl font-bold text-rose-400 tracking-tight">{blockedCalls}</div>
-            </div>
-          </div>
+                <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-5 space-y-1">
+                  <div className="text-xs font-medium text-emerald-400">Allowed Executions</div>
+                  <div className="text-2xl font-bold text-emerald-400 tracking-tight">{allowedCalls}</div>
+                </div>
 
-          {/* Tab 1: Dashboard Feed */}
-          {activeTab === 'feed' && (
+                <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-5 space-y-1">
+                  <div className="text-xs font-medium text-rose-400">Violations Prevented</div>
+                  <div className="text-2xl font-bold text-rose-400 tracking-tight">{blockedCalls}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Logs */}
+          {activeTab === 'logs' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Live Audit Feed</h2>
+                <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Live Audit Log Feed</h2>
                 <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Streaming
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Live WebSocket Stream
                 </span>
               </div>
 
@@ -242,7 +280,7 @@ export default function EnterpriseSecurityDashboard() {
             </div>
           )}
 
-          {/* Tab 2: API Keys */}
+          {/* Tab 3: API Keys */}
           {activeTab === 'keys' && (
             <div className="space-y-6">
               <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-5 space-y-3">
@@ -284,7 +322,7 @@ export default function EnterpriseSecurityDashboard() {
             </div>
           )}
 
-          {/* Tab 3: Policies */}
+          {/* Tab 4: Policies */}
           {activeTab === 'policies' && (
             <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-6 space-y-6">
               <div className="space-y-2">
