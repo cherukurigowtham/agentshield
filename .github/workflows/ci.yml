@@ -29,16 +29,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Install Monorepo Dependencies
-        run: npm install
+        run: npm install --include=optional
 
       - name: Compile All TypeScript Packages & Dashboard
         run: |
-          npm --prefix packages/sdk-ts run build
-          npm --prefix packages/policy-packs run build
-          npm --prefix packages/cli run build
+          npx -p typescript tsc -p packages/sdk-ts/tsconfig.json
+          npx -p typescript tsc -p packages/policy-packs/tsconfig.json && cp -r packages/policy-packs/policies packages/policy-packs/dist/
+          npx -p typescript tsc -p packages/cli/tsconfig.json
           npm --prefix apps/dashboard run build
 
       - name: Upload Built SDK Artifact
@@ -64,7 +63,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Download Monorepo Artifacts
         uses: actions/download-artifact@v4
@@ -72,7 +70,7 @@ jobs:
           name: monorepo-dist
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --include=optional
 
       - name: Execute Full Automated Security & Red-Teaming Suite
         run: node --test packages/sdk-ts/dist/evaluator.test.js packages/sdk-ts/dist/stress.test.js packages/sdk-ts/dist/owasp.test.js packages/sdk-ts/dist/mitre.test.js packages/sdk-ts/dist/adapters.test.js packages/sdk-ts/dist/redteam.test.js
@@ -86,7 +84,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Download Monorepo Artifacts
         uses: actions/download-artifact@v4
@@ -94,7 +91,7 @@ jobs:
           name: monorepo-dist
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --include=optional
 
       - name: Validate Policy Packs
         run: node --test packages/policy-packs/dist/policy.test.js
@@ -108,7 +105,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Download Monorepo Artifacts
         uses: actions/download-artifact@v4
@@ -116,7 +112,7 @@ jobs:
           name: monorepo-dist
 
       - name: Install Dependencies
-        run: npm install
+        run: npm install --include=optional
 
       - name: Test CLI Package
         run: node --test packages/cli/dist/cli.test.js
