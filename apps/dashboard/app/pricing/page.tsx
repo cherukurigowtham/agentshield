@@ -27,11 +27,14 @@ export default function PricingPage() {
 
       {/* Hero Section */}
       <main className="max-w-6xl mx-auto px-6 py-16 flex-1 w-full text-center">
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono mb-6">
+          🎉 100% Free During Public Launch — All Pro & Enterprise Features Included
+        </div>
         <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">
-          Predictable Pricing for AI Agent Security
+          Start Free. Scale Security Without Limits.
         </h1>
-        <p className="text-gray-400 max-w-xl mx-auto text-base mb-16">
-          Start for free with open-source local guardrails, or upgrade to AgentShield Cloud for real-time team governance, SOC2 logs, and enterprise kill-switches.
+        <p className="text-gray-400 max-w-2xl mx-auto text-base mb-16">
+          AgentShield is currently 100% free for developers and production AI teams. Get full access to local SDKs, the Next.js control plane, real-time alert webhooks, and enterprise policy packs with zero credit card required.
         </p>
 
         {/* Pricing Cards Grid */}
