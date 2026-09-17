@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
-  ShieldCheck, Activity, Sliders, Lock, Key, Copy, Check, LogOut, Layers, Sparkles
+  ShieldCheck, Activity, Sliders, Key, Copy, Check, LogOut, Layers, Sparkles
 } from 'lucide-react';
 
 interface SecurityEvent {
@@ -37,53 +37,43 @@ export default function EnterpriseSecurityDashboard() {
   };
 
   const [copiedKey, setCopiedKey] = useState(false);
+  const [events, setEvents] = useState<SecurityEvent[]>([]);
+
+  // Fetch real telemetry logs from backend
+  useEffect(() => {
+    const fetchTelemetry = async () => {
+      try {
+        const res = await fetch('/api/telemetry');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+            const mapped: SecurityEvent[] = data.logs.map((log: any, i: number) => ({
+              id: `evt_${i}_${Date.now()}`,
+              timestamp: new Date(log.timestamp || Date.now()).toLocaleTimeString(),
+              agentId: log.agentId || 'agent-service',
+              toolName: log.toolName || 'tool_execution',
+              params: typeof log.params === 'string' ? log.params : JSON.stringify(log.params || {}),
+              status: log.actionTaken === 'BLOCK' ? 'BLOCK' : 'ALLOW',
+              reason: log.reason,
+            }));
+            setEvents(mapped);
+          }
+        }
+      } catch {
+        // Fallback to empty clean state
+      }
+    };
+
+    fetchTelemetry();
+    const interval = setInterval(fetchTelemetry, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleCopyKey = () => {
     navigator.clipboard.writeText(user.apiKey);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
-
-  const [events] = useState<SecurityEvent[]>([
-    {
-      id: 'evt_1',
-      timestamp: '14:32:05',
-      agentId: 'acme-finance-bot',
-      toolName: 'transfer_funds',
-      params: '{"recipient": "Alice", "amount": 250}',
-      status: 'ALLOW',
-    },
-    {
-      id: 'evt_2',
-      timestamp: '14:32:12',
-      agentId: 'acme-finance-bot',
-      toolName: 'transfer_funds',
-      params: '{"recipient": "Unknown", "amount": 5000}',
-      status: 'BLOCK',
-      reason: 'Amount ($5,000) exceeds maximum transaction cap ($1,000)',
-      remediation: 'Reduce amount parameter to <= $1,000.',
-    },
-    {
-      id: 'evt_3',
-      timestamp: '14:32:28',
-      agentId: 'acme-support-bot',
-      toolName: 'query_database',
-      params: '{"query": "SELECT * FROM users; DROP TABLE users;"}',
-      status: 'BLOCK',
-      reason: 'Security threat detected: Indirect Prompt Injection (DROP TABLE)',
-      remediation: 'Sanitize payload string before database execution.',
-    },
-    {
-      id: 'evt_4',
-      timestamp: '14:33:01',
-      agentId: 'acme-retry-bot',
-      toolName: 'retry_payment',
-      params: '{"orderId": "ORD-99"}',
-      status: 'CIRCUIT_TRIPPED',
-      reason: 'Circuit Breaker TRIPPED: Tool called 4 times in 5s loop',
-      remediation: 'Abort retry loop and request human authorization.',
-    },
-  ]);
 
   const totalCalls = events.length;
   const blockedCalls = events.filter(e => e.status !== 'ALLOW').length;
@@ -236,47 +226,53 @@ export default function EnterpriseSecurityDashboard() {
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Live Audit Log Feed</h2>
                 <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Live WebSocket Stream
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Telemetry Feed Active
                 </span>
               </div>
 
-              <div className="space-y-2.5 font-mono text-xs">
-                {events.map((evt) => (
-                  <div
-                    key={evt.id}
-                    className={`p-4 rounded-xl border transition ${
-                      evt.status === 'ALLOW'
-                        ? 'bg-slate-900/30 border-slate-900'
-                        : 'bg-rose-950/10 border-rose-950/40'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          evt.status === 'ALLOW' 
-                            ? 'bg-emerald-500/10 text-emerald-400' 
-                            : 'bg-rose-500/10 text-rose-400'
-                        }`}>
-                          {evt.status === 'ALLOW' ? 'ALLOWED' : 'BLOCKED'}
-                        </span>
-                        <span className="text-white font-semibold">{evt.toolName}</span>
-                        <span className="text-slate-500">by {evt.agentId}</span>
+              {events.length === 0 ? (
+                <div className="p-12 text-center border border-slate-900 rounded-xl bg-slate-900/20 text-slate-500 text-xs">
+                  No telemetry logs received yet. Execute agent requests via API key to view live logs.
+                </div>
+              ) : (
+                <div className="space-y-2.5 font-mono text-xs">
+                  {events.map((evt) => (
+                    <div
+                      key={evt.id}
+                      className={`p-4 rounded-xl border transition ${
+                        evt.status === 'ALLOW'
+                          ? 'bg-slate-900/30 border-slate-900'
+                          : 'bg-rose-950/10 border-rose-950/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            evt.status === 'ALLOW' 
+                              ? 'bg-emerald-500/10 text-emerald-400' 
+                              : 'bg-rose-500/10 text-rose-400'
+                          }`}>
+                            {evt.status === 'ALLOW' ? 'ALLOWED' : 'BLOCKED'}
+                          </span>
+                          <span className="text-white font-semibold">{evt.toolName}</span>
+                          <span className="text-slate-500">by {evt.agentId}</span>
+                        </div>
+                        <span className="text-slate-500 text-[10px]">{evt.timestamp}</span>
                       </div>
-                      <span className="text-slate-500 text-[10px]">{evt.timestamp}</span>
-                    </div>
 
-                    <div className="text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-900 text-[11px] truncate">
-                      {evt.params}
-                    </div>
-
-                    {evt.reason && (
-                      <div className="mt-2 text-[11px] text-rose-400">
-                        Reason: {evt.reason}
+                      <div className="text-slate-300 bg-slate-950/80 p-2.5 rounded-lg border border-slate-900 text-[11px] truncate">
+                        {evt.params}
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+
+                      {evt.reason && (
+                        <div className="mt-2 text-[11px] text-rose-400">
+                          Reason: {evt.reason}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
