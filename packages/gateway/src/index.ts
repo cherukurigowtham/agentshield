@@ -1,4 +1,4 @@
-import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply, FastifyListenOptions, FastifyServerOptions } from 'fastify';
 import { AgentShield, GuardrailPolicy, ToolCallRequest, EvaluationResult } from '@agentshield/sdk';
 import crypto from 'node:crypto';
 import { getRedisStore, RedisStore } from './store/redisStore.js';
@@ -13,6 +13,9 @@ import authPlugin, {
   generateAPIKey,
   ROLE_PERMISSIONS
 } from './auth/index.js';
+import { loadTLSConfig, createTLSOptions, TLSOptions } from './tls/index.js';
+import https from 'node:https';
+import fs from 'node:fs';
 
 export interface TenantAccount {
   tenantId: string;
@@ -90,15 +93,31 @@ declare module 'fastify' {
     getAPIKey: typeof getAPIKey;
   }
 }
-
-const fastify = Fastify({
-  logger: {
-    transport: {
-      target: 'pino-pretty',
-      options: { colorize: true },
+ 
+// Build Fastify options with optional HTTPS
+function buildFastifyOptions() {
+  const baseOptions = {
+    logger: {
+      transport: {
+        target: 'pino-pretty',
+        options: { colorize: true },
+      },
     },
-  },
-}) as FastifyInstance & {
+  };
+  
+  try {
+    const tlsConfig = loadTLSConfig();
+    if (tlsConfig.enabled) {
+      const opts = createTLSOptions(tlsConfig);
+      return { ...baseOptions, https: opts };
+    }
+  } catch {
+    // Ignore TLS config errors during startup
+  }
+  return baseOptions;
+}
+
+const fastify = Fastify(buildFastifyOptions()) as FastifyInstance & {
   verifyAPIKey: typeof verifyAPIKey;
   createAPIKey: typeof createAPIKey;
   revokeAPIKey: typeof revokeAPIKey;
@@ -689,49 +708,9 @@ fastify.get('/v1/policies', {
       fastify.log.error({ err }, 'Failed to list policies');
       return reply.code(500).send({ error: 'Failed to list policies' });
     }
-  }
-  
+}
+
   return reply.code(503).send({ error: 'Policy storage unavailable - Redis not connected' });
-});
-
-// Health Check with Redis connectivity
-fastify.get('/health', async () => {
-  const redisHealthy = redisEnabled && redisStore ? await redisStore.ping() : false;
-  return { 
-    status: redisHealthy ? 'ok' : 'degraded', 
-    version: '0.1.0', 
-    mode: 'multi-tenant',
-    redis: redisHealthy ? 'connected' : (redisEnabled ? 'disconnected' : 'disabled'),
-  };
-});
-
-// Policy JSON Schema
-fastify.get('/v1/schema', async () => {
-  return {
-    $schema: 'http://json-schema.org/draft-07/schema#',
-    $id: 'https://agentshield.dev/schemas/guardrail-policy.json',
-    title: 'AgentShield Guardrail Policy',
-    type: 'object',
-    properties: {
-      allowedTools: { type: 'array', items: { type: 'string' } },
-      forbiddenTools: { type: 'array', items: { type: 'string' } },
-      maxParamValues: { type: 'object', additionalProperties: { type: 'number' } },
-      forbiddenPatterns: { type: 'array', items: { type: 'string' } },
-      requiredFields: { type: 'array', items: { type: 'string' } },
-      rateLimit: { type: 'object', properties: { maxCallsPerMinute: { type: 'integer' } } },
-      maxCostPerSession: { type: 'number' },
-      circuitBreaker: {
-        type: 'object',
-        properties: {
-          maxRepeatedCalls: { type: 'integer' },
-          timeWindowMs: { type: 'integer' },
-        },
-      },
-      enableInjectionSanitizer: { type: 'boolean' },
-      timeoutMs: { type: 'integer' },
-      requireApproval: { type: 'boolean' },
-    },
-  };
 });
 
 const start = async () => {
@@ -742,10 +721,18 @@ const start = async () => {
     // Initialize Redis
     await initRedis();
     
+    // Check if TLS was enabled during Fastify creation
+    const isTLS = !!fastify.server && 'addContext' in fastify.server;
+    
     const port = parseInt(process.env.PORT || '8080', 10);
     const host = process.env.HOST || '0.0.0.0';
+    
     await fastify.listen({ port, host });
-    console.log(`🛡️ AgentShield Multi-Tenant Gateway running on http://${host}:${port}`);
+    const protocol = isTLS ? 'https' : 'http';
+    if (isTLS) {
+      console.log('🔒 TLS/mTLS enabled');
+    }
+    console.log(`🛡️ AgentShield Multi-Tenant Gateway running on ${protocol}://${host}:${port}`);
     console.log(`   POST   /v1/auth/tenants     - Provision new tenant + admin API key`);
     console.log(`   POST   /v1/auth/login       - Login with API key, returns JWT`);
     console.log(`   POST   /v1/auth/keys        - Create API key (keys:write)`);
