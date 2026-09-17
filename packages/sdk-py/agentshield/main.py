@@ -73,7 +73,7 @@ class InjectionSanitizer:
         normalized = re.sub(r"\\t|\\n|\\r", " ", payload_str)
 
         # Zero-width unicode scan
-        if re.search(r"[\u200B-\u200D\uFEFF]", normalized):
+        if re.search(r"[\u200B-\u200D\uFEFF]|\\u200[b-dB-D]|\\ufeff", normalized, re.IGNORECASE):
             return {"detected": True, "type": "ZERO_WIDTH_UNICODE", "pattern": "Zero-width unicode detected"}
 
         for pattern in cls.INDIRECT_PATTERNS:
@@ -185,7 +185,7 @@ class AgentShield:
 
         # 2. Indirect Prompt Injection & Zero-Width Unicode Scan
         if policy.get("enableInjectionSanitizer", True):
-            inj_res = InjectionSanitizer.inspect(json.dumps(params))
+            inj_res = InjectionSanitizer.inspect(json.dumps(params, ensure_ascii=False))
             if inj_res["detected"]:
                 reason = f"Security Threat: {inj_res['type']} ({inj_res['pattern']})"
                 res = {"allowed": False, "actionTaken": "BLOCK", "reason": reason, "timestamp": timestamp}
@@ -207,6 +207,23 @@ class AgentShield:
             res = {"allowed": False, "actionTaken": "BLOCK", "reason": reason, "timestamp": timestamp}
             self._handle_violation_and_telemetry(tool_name, params, res, policy)
             return res
+
+        # 4b. Required Fields Check
+        required_fields = policy.get("requiredFields")
+        if required_fields:
+            for field in required_fields:
+                if field not in params or params[field] is None:
+                    reason = f"Missing required parameter field '{field}'."
+                    res = {
+                        "allowed": False,
+                        "actionTaken": "BLOCK",
+                        "reason": reason,
+                        "remediation": {"suggestedFix": f"Provide required field '{field}'."},
+                        "timestamp": timestamp
+                    }
+                    self._handle_violation_and_telemetry(tool_name, params, res, policy)
+                    return res
+
 
         # 5. Max Param Values
         max_params = policy.get("maxParamValues", {})
@@ -231,7 +248,7 @@ class AgentShield:
                 self._rate_limit_tracker = {}
             now = time.time()
             window_start = now - 60
-            session_calls = self._rate_limit_tracker.get(session_key, [])
+            session_calls = list(self._rate_limit_tracker.get(session_key, []))
             session_calls = [t for t in session_calls if t > window_start]
             
             if len(session_calls) >= rate_limit["maxCallsPerMinute"]:
@@ -248,32 +265,7 @@ class AgentShield:
             session_calls.append(now)
             self._rate_limit_tracker[session_key] = session_calls
 
-        # 6. Rate Limit
-        rate_limit = policy.get("rateLimit")
-        if rate_limit and rate_limit.get("maxCallsPerMinute"):
-            if not hasattr(self, '_rate_limit_tracker'):
-                self._rate_limit_tracker = {}
-            now = time.time()
-            window_start = now - 60
-            session_calls = self._rate_limit_tracker.get(session_key, [])
-            print(f"   DEBUG: Raw session_calls for {session_key}: {session_calls}, policy has rateLimit: {rate_limit is not None}")
-            session_calls = [t for t in session_calls if t > window_start]
-            print(f"   DEBUG: Filtered session_calls: {session_calls}, count={len(session_calls)}")
-            
-            if len(session_calls) >= rate_limit["maxCallsPerMinute"]:
-                reason = f"Rate limit exceeded: Max {rate_limit['maxCallsPerMinute']} calls/min allowed."
-                res = {
-                    "allowed": False,
-                    "actionTaken": "BLOCK",
-                    "reason": reason,
-                    "timestamp": timestamp
-                }
-                self._handle_violation_and_telemetry(tool_name, params, res, policy)
-                return res
-            
-            session_calls.append(now)
-            self._rate_limit_tracker[session_key] = session_calls
-            print(f"   DEBUG: After append, session_calls: {session_calls}")
+
 
         # 7. Budget Cap
         if estimated_cost is not None and policy.get("maxCostPerSession"):
