@@ -7,10 +7,13 @@ pub mod error;
 pub mod audit;
 pub mod openai_adapter;
 
+#[cfg(test)]
+mod tests;
+
 pub use types::{
     GuardrailPolicy, RateLimitConfig, CircuitBreakerConfig,
     ToolCallRequest, EvaluationResult, ActionTaken, Remediation,
-    AgentShieldConfig, OpenAIToolCall, OpenAIFunction,
+    AgentShieldConfig,
 };
 pub use sanitizer::{InjectionSanitizer, InjectionSanitizeResult};
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerResult};

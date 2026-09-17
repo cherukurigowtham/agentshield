@@ -21,3 +21,8 @@ reqwest = { version = "0.11", features = ["json"] }
 thiserror = "1.0"
 async-trait = "0.1"
 dashmap = "5.0"
+hex = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full", "test-util"] }
+rand = "0.8"

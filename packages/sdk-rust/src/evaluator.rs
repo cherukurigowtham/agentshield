@@ -154,7 +154,7 @@ impl PolicyEvaluator {
                         timestamp,
                         remediation: Some(crate::types::Remediation {
                             status: "BLOCKED".to_string(),
-                            suggested_fix: Some(format!("Budget limit reached (${:.2f}). Request budget approval.", max_cost)),
+                            suggested_fix: Some(format!("Budget limit reached (${:.2}). Request budget approval.", max_cost)),
                             max_allowed_value: None,
                         }),
                     };

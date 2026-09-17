@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use serde_json;
 use sha2::{Sha256, Digest};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -48,7 +49,7 @@ impl CircuitBreaker {
 
         let mut history = self.call_tracker.entry(tracker_key.clone()).or_insert_with(Vec::new);
 
-        let recent: Vec<CallRecord> = history.iter()
+        let mut recent: Vec<CallRecord> = history.iter()
             .filter(|r| now.saturating_sub(r.timestamp) < window_ms)
             .cloned()
             .collect();

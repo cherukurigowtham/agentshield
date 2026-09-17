@@ -1,9 +1,13 @@
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
+
+pub type BoxFuture<R> = Pin<Box<dyn Future<Output = R> + Send>>;
 
 pub struct AgentShield {
     config: crate::types::AgentShieldConfig,
@@ -58,11 +62,11 @@ impl AgentShield {
         result
     }
 
-    pub fn wrap_tool<F, Fut, T, R>(&self, tool_name: &str, tool_fn: F, policy: crate::types::GuardrailPolicy) -> impl Fn(T) -> Fut + Clone
+    pub fn wrap_tool<F, Fut, T, R>(&self, tool_name: &str, tool_fn: F, policy: crate::types::GuardrailPolicy) -> impl Fn(T) -> BoxFuture<Result<R, crate::error::AgentShieldError>> + Clone
     where
         F: Fn(T) -> Fut + Clone + Send + Sync + 'static,
-        Fut: std::future::Future<Output = R> + Send + 'static,
-        T: Send + 'static,
+        Fut: Future<Output = Result<R, crate::error::AgentShieldError>> + Send + 'static,
+        T: Send + 'static + serde::Serialize,
         R: Send + 'static,
     {
         let shield = self.clone();
@@ -72,27 +76,30 @@ impl AgentShield {
             let tool_name = tool_name.clone();
             let policy = policy.clone();
             let tool_fn = tool_fn.clone();
-            async move {
+            Box::pin(async move {
+                let policy_for_guard = policy.clone();
                 let request = crate::types::ToolCallRequest {
                     tool_name: tool_name.clone(),
                     params: serde_json::to_value(&input).unwrap_or_else(|_| json!({ "input": input })).as_object().unwrap().clone().into_iter().collect(),
                     ..Default::default()
                 };
 
-                let eval_result = shield.guard(request, policy);
+                let eval_result = shield.guard(request, policy_for_guard);
                 if !eval_result.allowed {
                     return Err(crate::error::AgentShieldError::Blocked(eval_result.reason.unwrap_or_default()));
                 }
 
+                let result_fut = tool_fn(input);
+                
                 if let Some(timeout_ms) = policy.timeout_ms {
-                    match timeout(Duration::from_millis(timeout_ms), tool_fn(input)).await {
-                        Ok(result) => Ok(result),
+                    match timeout(Duration::from_millis(timeout_ms), result_fut).await {
+                        Ok(inner_result) => inner_result,
                         Err(_) => Err(crate::error::AgentShieldError::Timeout(timeout_ms)),
                     }
                 } else {
-                    Ok(tool_fn(input).await)
+                    result_fut.await
                 }
-            }
+            })
         }
     }
 

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use hex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditRecord {
@@ -39,7 +40,7 @@ impl AuditExporter {
 
     pub fn create_record(&self, request: &crate::types::ToolCallRequest, result: &crate::types::EvaluationResult) -> AuditRecord {
         let record_id = format!("rec_{}_{}", chrono::Utc::now().timestamp_millis(), uuid::Uuid::new_v4().simple().to_string().chars().take(6).collect::<String>());
-        let timestamp = result.timestamp.clone().unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        let timestamp = if result.timestamp.is_empty() { chrono::Utc::now().to_rfc3339() } else { result.timestamp.clone() };
         let agent_id = request.agent_id.clone().unwrap_or_else(|| "default-agent".to_string());
 
         let mut params_sanitized = request.params.clone();

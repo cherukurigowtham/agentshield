@@ -12,9 +12,9 @@ async fn main() {
     println!("===============================================================\n");
 
     let shield = AgentShield::new(AgentShieldConfig {
-        on_violation: Some(Box::new(|result, request| {
+        on_violation: Some(std::sync::Arc::new(|result: &crate::EvaluationResult, request: &crate::ToolCallRequest| {
             println!("[SECURITY ALERT] Tool: {} | Action: {:?} | Reason: {}",
-                request.tool_name, result.action_taken, result.reason.unwrap_or_default());
+                request.tool_name, result.action_taken, result.reason.clone().unwrap_or_default());
             if let Some(rem) = &result.remediation {
                 println!("[REMEDIATION HINT] {}", rem.suggested_fix.as_deref().unwrap_or_default());
             }

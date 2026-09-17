@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GuardrailPolicy {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -30,12 +30,12 @@ pub struct GuardrailPolicy {
     pub webhook_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RateLimitConfig {
     pub max_calls_per_minute: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CircuitBreakerConfig {
     #[serde(default = "default_max_repeated_calls")]
     pub max_repeated_calls: u32,
@@ -46,7 +46,7 @@ pub struct CircuitBreakerConfig {
 fn default_max_repeated_calls() -> u32 { 4 }
 fn default_time_window_ms() -> u64 { 10000 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCallRequest {
     pub tool_name: String,
@@ -69,9 +69,19 @@ impl ToolCallRequest {
             estimated_cost: None,
         }
     }
+
+    pub fn with_agent_id(mut self, agent_id: &str) -> Self {
+        self.agent_id = Some(agent_id.to_string());
+        self
+    }
+
+    pub fn with_session_id(mut self, session_id: &str) -> Self {
+        self.session_id = Some(session_id.to_string());
+        self
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct EvaluationResult {
     pub allowed: bool,
@@ -83,9 +93,10 @@ pub struct EvaluationResult {
     pub remediation: Option<Remediation>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ActionTaken {
+    #[default]
     Allow,
     Block,
     RequireApproval,
@@ -101,13 +112,16 @@ pub struct Remediation {
     pub max_allowed_value: Option<f64>,
 }
 
-#[derive(Debug, Clone)]
+use std::sync::Arc;
+use std::fmt::Debug;
+
+#[derive(Clone)]
 pub struct AgentShieldConfig {
     pub api_key: Option<String>,
     pub environment: Option<String>,
     pub telemetry_url: Option<String>,
     pub webhook_url: Option<String>,
-    pub on_violation: Option<Box<dyn Fn(&EvaluationResult, &ToolCallRequest) + Send + Sync>>,
+    pub on_violation: Option<Arc<dyn Fn(&EvaluationResult, &ToolCallRequest) + Send + Sync + 'static>>,
 }
 
 impl Default for AgentShieldConfig {
