@@ -1,6 +1,7 @@
 import Fastify, { FastifyRequest, FastifyReply } from 'fastify';
 import { AgentShield, GuardrailPolicy, ToolCallRequest, EvaluationResult } from '@agentshield/sdk';
 import crypto from 'node:crypto';
+import { getRedisStore, RedisStore } from './store/redisStore.js';
 
 export interface TenantAccount {
   tenantId: string;
@@ -48,7 +49,6 @@ interface ProvisionKeyRequest {
   plan?: 'free' | 'pro' | 'enterprise';
 }
 
-// Extend FastifyRequest type to include tenant
 declare module 'fastify' {
   interface FastifyRequest {
     tenant?: TenantAccount;
@@ -66,11 +66,37 @@ const fastify = Fastify({
 
 const shield = new AgentShield();
 
-// Isolated Multi-Tenant In-Memory Stores
-const tenantKeys = new Map<string, TenantAccount>();
-const tenantPolicyStore = new Map<string, GuardrailPolicy>();
+// Initialize Redis store
+let redisStore: RedisStore | null = null;
+let redisEnabled = false;
 
-// Seed default demo key for immediate developer testing
+async function initRedis(): Promise<void> {
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) {
+    fastify.log.warn('REDIS_URL not set - running in-memory mode (data not persisted)');
+    return;
+  }
+  
+  try {
+    redisStore = getRedisStore({
+      url: redisUrl,
+      keyPrefix: 'agentshield:gateway:',
+      defaultTtlSeconds: parseInt(process.env.REDIS_TTL_SECONDS || '86400', 10),
+    });
+    await redisStore.connect();
+    redisEnabled = true;
+    fastify.log.info('Redis store connected');
+  } catch (err) {
+    fastify.log.warn({ err }, 'Failed to connect to Redis - running in-memory mode');
+    redisStore = null;
+    redisEnabled = false;
+  }
+}
+
+// In-memory fallback for tenant keys (small, frequently accessed)
+const tenantKeys = new Map<string, TenantAccount>();
+
+// Seed default demo key
 const demoTenant: TenantAccount = {
   tenantId: 'tenant_demo_001',
   key: 'ag_live_demo_key_12345',
@@ -84,7 +110,6 @@ tenantKeys.set(demoTenant.key, demoTenant);
 
 // Multi-Tenant Authentication & Usage Quota Pre-Handler
 fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-  // Exclude health check and open schema routes from auth requirement
   if (request.url === '/health' || request.url === '/v1/schema' || request.url === '/v1/auth/keys') {
     return;
   }
@@ -96,7 +121,6 @@ fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply
   }
 
   if (!rawKey) {
-    // If no key provided, default to demo tenant for zero-friction local testing
     request.tenant = demoTenant;
     return;
   }
@@ -108,7 +132,6 @@ fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply
     });
   }
 
-  // Quota enforcement check
   if (tenant.usageCount >= tenant.monthlyQuota && tenant.plan !== 'enterprise') {
     return reply.code(429).send({
       error: `Monthly API quota limit reached (${tenant.usageCount}/${tenant.monthlyQuota}). Upgrade to Pro or Enterprise plan.`,
@@ -120,7 +143,7 @@ fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply
   request.tenant = tenant;
 });
 
-// 1. Provision New Isolated API Key
+// Provision New Isolated API Key
 fastify.post<{ Body: ProvisionKeyRequest }>('/v1/auth/keys', async (request, reply) => {
   const { name, plan = 'free' } = request.body || {};
 
@@ -158,7 +181,7 @@ fastify.post<{ Body: ProvisionKeyRequest }>('/v1/auth/keys', async (request, rep
   });
 });
 
-// 2. Retrieve Tenant API Usage Metrics
+// Retrieve Tenant API Usage Metrics
 fastify.get('/v1/auth/usage', async (request, reply) => {
   const tenant = request.tenant;
   if (!tenant) {
@@ -175,7 +198,7 @@ fastify.get('/v1/auth/usage', async (request, reply) => {
   });
 });
 
-// 3. Evaluate Single Tool Call (Tenant Isolated)
+// Evaluate Single Tool Call (Tenant Isolated + Redis Persistence)
 fastify.post<{ Body: GuardRequest }>('/v1/guard', async (request, reply) => {
   const tenant = request.tenant!;
   const { toolName, params, agentId, sessionId, policy, estimatedCost } = request.body;
@@ -197,6 +220,25 @@ fastify.post<{ Body: GuardRequest }>('/v1/guard', async (request, reply) => {
   const result: EvaluationResult = shield.guard(evalRequest, policy);
   tenant.usageCount += 1;
 
+  // Persist telemetry to Redis (non-blocking)
+  if (redisEnabled && redisStore) {
+    try {
+      await redisStore.appendTelemetry({
+        tenantId: tenant.tenantId,
+        toolName,
+        agentId: evalRequest.agentId,
+        sessionId: evalRequest.sessionId,
+        params,
+        actionTaken: result.actionTaken,
+        reason: result.reason,
+        timestamp: result.timestamp,
+        allowed: result.allowed,
+      });
+    } catch (err) {
+      fastify.log.warn({ err }, 'Failed to persist telemetry');
+    }
+  }
+
   const response: GuardResponse = {
     allowed: result.allowed,
     reason: result.reason,
@@ -213,7 +255,7 @@ fastify.post<{ Body: GuardRequest }>('/v1/guard', async (request, reply) => {
   return reply.send(response);
 });
 
-// 4. Batch Evaluate Tool Calls (Tenant Isolated)
+// Batch Evaluate Tool Calls
 fastify.post<{ Body: BatchGuardRequest }>('/v1/guard/batch', async (request, reply) => {
   const tenant = request.tenant!;
   const { requests } = request.body;
@@ -222,7 +264,7 @@ fastify.post<{ Body: BatchGuardRequest }>('/v1/guard/batch', async (request, rep
     return reply.code(400).send({ error: 'requests array required' });
   }
 
-  const results = requests.map(({ toolName, params, agentId, sessionId, policy, estimatedCost }) => {
+  const results = await Promise.all(requests.map(async ({ toolName, params, agentId, sessionId, policy, estimatedCost }) => {
     const evalRequest: ToolCallRequest = { 
       toolName, 
       params, 
@@ -232,6 +274,26 @@ fastify.post<{ Body: BatchGuardRequest }>('/v1/guard/batch', async (request, rep
     };
     const result = shield.guard(evalRequest, policy);
     tenant.usageCount += 1;
+
+    // Persist telemetry
+    if (redisEnabled && redisStore) {
+      try {
+        await redisStore.appendTelemetry({
+          tenantId: tenant.tenantId,
+          toolName,
+          agentId: evalRequest.agentId,
+          sessionId: evalRequest.sessionId,
+          params,
+          actionTaken: result.actionTaken,
+          reason: result.reason,
+          timestamp: result.timestamp,
+          allowed: result.allowed,
+        });
+      } catch (err) {
+        fastify.log.warn({ err }, 'Failed to persist batch telemetry');
+      }
+    }
+
     return {
       toolName,
       allowed: result.allowed,
@@ -241,12 +303,12 @@ fastify.post<{ Body: BatchGuardRequest }>('/v1/guard/batch', async (request, rep
       tenantId: tenant.tenantId,
       remediation: result.remediation,
     };
-  });
+  }));
 
   return reply.send({ results });
 });
 
-// 5. Store Tenant Policy (Keyed by TenantId:PolicyId)
+// Store Tenant Policy (Redis)
 fastify.post<{ Body: PolicyStoreRequest }>('/v1/policies', async (request, reply) => {
   const tenant = request.tenant!;
   const { id, policy } = request.body;
@@ -255,37 +317,89 @@ fastify.post<{ Body: PolicyStoreRequest }>('/v1/policies', async (request, reply
     return reply.code(400).send({ error: 'Missing id or policy' });
   }
 
-  const storeKey = `${tenant.tenantId}:${id}`;
-  tenantPolicyStore.set(storeKey, policy);
-  return reply.send({ id, stored: true, tenantId: tenant.tenantId });
+  if (redisEnabled && redisStore) {
+    try {
+      await redisStore.storePolicy(`${tenant.tenantId}:${id}`, policy);
+      return reply.send({ id, stored: true, tenantId: tenant.tenantId });
+    } catch (err) {
+      fastify.log.error({ err }, 'Failed to store policy');
+      return reply.code(500).send({ error: 'Failed to store policy' });
+    }
+  }
+  
+  // Fallback to in-memory
+  return reply.code(503).send({ error: 'Policy storage unavailable - Redis not connected' });
 });
 
-// 6. Retrieve Tenant Policy
+// Retrieve Tenant Policy (Redis)
 fastify.get<{ Params: { id: string } }>('/v1/policies/:id', async (request, reply) => {
   const tenant = request.tenant!;
-  const storeKey = `${tenant.tenantId}:${request.params.id}`;
-  const policy = tenantPolicyStore.get(storeKey);
   
-  if (!policy) {
-    return reply.code(404).send({ error: 'Policy not found for tenant' });
+  if (redisEnabled && redisStore) {
+    try {
+      const policy = await redisStore.getPolicy(`${tenant.tenantId}:${request.params.id}`);
+      if (!policy) {
+        return reply.code(404).send({ error: 'Policy not found for tenant' });
+      }
+      return reply.send(policy);
+    } catch (err) {
+      fastify.log.error({ err }, 'Failed to retrieve policy');
+      return reply.code(500).send({ error: 'Failed to retrieve policy' });
+    }
   }
-  return reply.send(policy);
+  
+  return reply.code(503).send({ error: 'Policy storage unavailable - Redis not connected' });
 });
 
-// 7. Delete Tenant Policy
+// Delete Tenant Policy (Redis)
 fastify.delete<{ Params: { id: string } }>('/v1/policies/:id', async (request, reply) => {
   const tenant = request.tenant!;
-  const storeKey = `${tenant.tenantId}:${request.params.id}`;
-  const deleted = tenantPolicyStore.delete(storeKey);
-  return reply.send({ deleted, tenantId: tenant.tenantId });
+  
+  if (redisEnabled && redisStore) {
+    try {
+      const deleted = await redisStore.deletePolicy(`${tenant.tenantId}:${request.params.id}`);
+      return reply.send({ deleted, tenantId: tenant.tenantId });
+    } catch (err) {
+      fastify.log.error({ err }, 'Failed to delete policy');
+      return reply.code(500).send({ error: 'Failed to delete policy' });
+    }
+  }
+  
+  return reply.code(503).send({ error: 'Policy storage unavailable - Redis not connected' });
 });
 
-// 8. Health Check
+// List Tenant Policies (Redis)
+fastify.get('/v1/policies', async (request, reply) => {
+  const tenant = request.tenant!;
+  
+  if (redisEnabled && redisStore) {
+    try {
+      const allPolicies = await redisStore.listPolicies();
+      const tenantPolicies = allPolicies
+        .filter(p => p.startsWith(`${tenant.tenantId}:`))
+        .map(p => p.replace(`${tenant.tenantId}:`, ''));
+      return reply.send({ policies: tenantPolicies });
+    } catch (err) {
+      fastify.log.error({ err }, 'Failed to list policies');
+      return reply.code(500).send({ error: 'Failed to list policies' });
+    }
+  }
+  
+  return reply.code(503).send({ error: 'Policy storage unavailable - Redis not connected' });
+});
+
+// Health Check with Redis connectivity
 fastify.get('/health', async () => {
-  return { status: 'ok', version: '0.1.0', mode: 'multi-tenant' };
+  const redisHealthy = redisEnabled && redisStore ? await redisStore.ping() : false;
+  return { 
+    status: redisHealthy ? 'ok' : 'degraded', 
+    version: '0.1.0', 
+    mode: 'multi-tenant',
+    redis: redisHealthy ? 'connected' : (redisEnabled ? 'disconnected' : 'disabled'),
+  };
 });
 
-// 9. Policy JSON Schema
+// Policy JSON Schema
 fastify.get('/v1/schema', async () => {
   return {
     $schema: 'http://json-schema.org/draft-07/schema#',
@@ -316,6 +430,9 @@ fastify.get('/v1/schema', async () => {
 
 const start = async () => {
   try {
+    // Initialize Redis
+    await initRedis();
+    
     const port = parseInt(process.env.PORT || '8080', 10);
     const host = process.env.HOST || '0.0.0.0';
     await fastify.listen({ port, host });
@@ -324,13 +441,14 @@ const start = async () => {
     console.log(`   GET    /v1/auth/usage     - Get tenant usage & quota metrics`);
     console.log(`   POST   /v1/guard          - Evaluate tool call (x-api-key authenticated)`);
     console.log(`   POST   /v1/guard/batch    - Evaluate batch tool calls`);
-    console.log(`   POST   /v1/policies       - Store tenant policy`);
-    console.log(`   GET    /v1/policies/:id   - Retrieve tenant policy`);
+    console.log(`   POST   /v1/policies       - Store tenant policy (Redis)`);
+    console.log(`   GET    /v1/policies/:id   - Retrieve tenant policy (Redis)`);
+    console.log(`   GET    /v1/policies       - List tenant policies (Redis)`);
     console.log(`   GET    /v1/schema         - JSON schema for policies`);
-    console.log(`   GET    /health            - Health check`);
+    console.log(`   GET    /health            - Health check (with Redis status)`);
   } catch (err) {
     fastify.log.error(err);
-    process.exit(1);
+    process.exit(1)
   }
 };
 

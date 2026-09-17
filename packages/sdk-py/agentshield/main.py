@@ -24,7 +24,7 @@ class CircuitBreaker:
 
     def check(self, session_key: str, tool_name: str, params: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
         max_calls = config.get("maxRepeatedCalls", 4)
-        window_s = config.get("timeWindowSeconds", 10)
+        window_s = config.get("timeWindowMs", 10000) / 1000.0
         now = time.time()
 
         reset_time = self.tripped_breakers.get(session_key)
@@ -81,7 +81,6 @@ class InjectionSanitizer:
             pass
         normalized = re.sub(r"\\t|\\n|\\r", " ", normalized)
 
-        # Zero-width unicode scan
         if re.search(r"[\u200B-\u200D\uFEFF]|\\u200[b-dB-D]|\\ufeff", normalized, re.IGNORECASE):
             return {"detected": True, "type": "ZERO_WIDTH_UNICODE", "pattern": "Zero-width unicode detected"}
 
@@ -93,7 +92,6 @@ class InjectionSanitizer:
             if re.search(pattern, normalized, re.IGNORECASE):
                 return {"detected": True, "type": "DESTRUCTIVE_PATTERN", "pattern": pattern}
 
-        # Base64 obfuscation scan
         b64_matches = re.findall(r"([A-Za-z0-9+/]{8,}={0,2})", normalized)
         for match in b64_matches:
             try:
@@ -171,6 +169,9 @@ class AgentShield:
         self.on_violation = on_violation
         self.circuit_breaker = CircuitBreaker()
         self.audit_exporter = AuditExporter()
+        # Instance-local state - NOT shared across instances
+        self._rate_limit_tracker: Dict[str, List[float]] = {}
+        self._session_costs: Dict[str, float] = {}
 
     def evaluate(
         self,
@@ -233,7 +234,6 @@ class AgentShield:
                     self._handle_violation_and_telemetry(tool_name, params, res, policy)
                     return res
 
-
         # 5. Max Param Values
         max_params = policy.get("maxParamValues", {})
         for param_key, max_val in max_params.items():
@@ -251,14 +251,12 @@ class AgentShield:
                     self._handle_violation_and_telemetry(tool_name, params, res, policy)
                     return res
 
-        # 6. Rate Limit
+        # 6. Rate Limit (sliding window, per-instance)
         rate_limit = policy.get("rateLimit")
         if rate_limit and rate_limit.get("maxCallsPerMinute"):
-            if not hasattr(self, '_rate_limit_tracker'):
-                self._rate_limit_tracker = {}
             now = time.time()
             window_start = now - 60
-            session_calls = list(self._rate_limit_tracker.get(session_key, []))
+            session_calls = self._rate_limit_tracker.get(session_key, [])
             session_calls = [t for t in session_calls if t > window_start]
             
             if len(session_calls) >= rate_limit["maxCallsPerMinute"]:
@@ -275,11 +273,9 @@ class AgentShield:
             session_calls.append(now)
             self._rate_limit_tracker[session_key] = session_calls
 
-
-
         # 7. Budget Cap
         if estimated_cost is not None and policy.get("maxCostPerSession"):
-            session_cost = getattr(self, '_session_costs', {}).get(session_key, 0.0)
+            session_cost = self._session_costs.get(session_key, 0.0)
             new_cost = session_cost + estimated_cost
             
             if new_cost > policy["maxCostPerSession"]:
@@ -293,8 +289,6 @@ class AgentShield:
                 self._handle_violation_and_telemetry(tool_name, params, res, policy)
                 return res
             
-            if not hasattr(self, '_session_costs'):
-                self._session_costs = {}
             self._session_costs[session_key] = new_cost
 
         # 8. Forbidden Patterns

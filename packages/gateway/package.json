@@ -13,7 +13,8 @@
   "dependencies": {
     "@agentshield/sdk": "file:../sdk-ts",
     "fastify": "^4.28.0",
-    "pino-pretty": "^11.2.0"
+    "pino-pretty": "^11.2.0",
+    "redis": "^4.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
