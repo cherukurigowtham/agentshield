@@ -19,6 +19,8 @@ export class InjectionSanitizer {
     /DROP(?:\/\*[\s\S]*?\*\/|\s)+TABLE/i,
     /DELETE(?:\/\*[\s\S]*?\*\/|\s)+FROM(?:\/\*[\s\S]*?\*\/|\s)+[a-z_]+/i,
     /TRUNCATE(?:\/\*[\s\S]*?\*\/|\s)+TABLE/i,
+    /UNION(?:\/\*[\s\S]*?\*\/|\s)+SELECT/i,
+    /INFORMATION_SCHEMA/i,
     /rm\s+-rf\s+/i,
     /chmod\s+777/i,
     /mkfs\./i,

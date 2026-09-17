@@ -1,3 +1,5 @@
+import math
+import unicodedata
 import functools
 import json
 import re
@@ -66,11 +68,18 @@ class InjectionSanitizer:
         r"TRUNCATE\s+TABLE",
         r"rm\s+-rf\s+",
         r"chmod\s+777",
+        r"UNION\s+SELECT",
+        r"INFORMATION_SCHEMA",
     ]
 
     @classmethod
     def inspect(cls, payload_str: str) -> Dict[str, Any]:
-        normalized = re.sub(r"\\t|\\n|\\r", " ", payload_str)
+        normalized = unicodedata.normalize('NFKC', payload_str)
+        try:
+            normalized = urllib.parse.unquote(normalized)
+        except Exception:
+            pass
+        normalized = re.sub(r"\\t|\\n|\\r", " ", normalized)
 
         # Zero-width unicode scan
         if re.search(r"[\u200B-\u200D\uFEFF]|\\u200[b-dB-D]|\\ufeff", normalized, re.IGNORECASE):
@@ -229,8 +238,9 @@ class AgentShield:
         max_params = policy.get("maxParamValues", {})
         for param_key, max_val in max_params.items():
             if param_key in params and isinstance(params[param_key], (int, float)):
-                if params[param_key] > max_val:
-                    reason = f"Parameter '{param_key}' value ({params[param_key]}) exceeds max allowed cap ({max_val})."
+                val = params[param_key]
+                if math.isnan(val) or math.isinf(val) or val > max_val:
+                    reason = f"Parameter '{param_key}' value ({val}) exceeds max allowed cap ({max_val})."
                     res = {
                         "allowed": False,
                         "actionTaken": "BLOCK",

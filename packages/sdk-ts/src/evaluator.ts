@@ -192,7 +192,7 @@ export class PolicyEvaluator {
     if (policy.maxParamValues) {
       for (const [paramKey, maxValue] of Object.entries(policy.maxParamValues)) {
         const actualVal = request.params[paramKey];
-        if (typeof actualVal === 'number' && actualVal > maxValue) {
+        if (typeof actualVal === 'number' && (Number.isNaN(actualVal) || !Number.isFinite(actualVal) || actualVal > maxValue)) {
           return {
             allowed: false,
             reason: `Parameter '${paramKey}' value (${actualVal}) exceeds maximum allowed threshold (${maxValue}).`,
