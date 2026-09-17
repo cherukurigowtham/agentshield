@@ -4,8 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
   ShieldAlert, CheckCircle2, AlertOctagon, Activity, 
-  Play, Sliders, Lock, ArrowUpRight, Zap, RefreshCw, Layers
+  Play, Sliders, Lock, ArrowUpRight, Zap, RefreshCw, Layers, Code, Check, X
 } from 'lucide-react';
+import { AgentShield, GuardrailPolicy } from '@agentshield/sdk';
 
 interface SecurityEvent {
   id: string;
@@ -18,10 +19,23 @@ interface SecurityEvent {
   remediation?: string;
 }
 
+const shieldEngine = new AgentShield();
+
 export default function CleanSecurityDashboard() {
-  const [activeTab, setActiveTab] = useState<'feed' | 'policies'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'playground' | 'policies'>('feed');
   const [maxTransferCap, setMaxTransferCap] = useState(1000);
   const [enableInjectionDefense, setEnableInjectionDefense] = useState(true);
+
+  // Playground state
+  const [playToolName, setPlayToolName] = useState('transfer_funds');
+  const [playParams, setPlayParams] = useState('{\n  "recipient": "ACC-998877",\n  "amount": 2500,\n  "note": "Payment memo"\n}');
+  const [playPolicy, setPlayPolicy] = useState<GuardrailPolicy>({
+    allowedTools: ['transfer_funds', 'search_kb', 'check_balance'],
+    maxParamValues: { amount: 1000 },
+    enableInjectionSanitizer: true
+  });
+  const [playgroundResult, setPlaygroundResult] = useState<any>(null);
+  const [evalTimeMs, setEvalTimeMs] = useState<number | null>(null);
 
   const [events, setEvents] = useState<SecurityEvent[]>([
     {
@@ -64,6 +78,31 @@ export default function CleanSecurityDashboard() {
     },
   ]);
 
+  const handleRunPlayground = () => {
+    let parsedParams = {};
+    try {
+      parsedParams = JSON.parse(playParams);
+    } catch {
+      setPlaygroundResult({
+        allowed: false,
+        reason: 'Invalid JSON syntax in tool parameters payload.',
+        actionTaken: 'BLOCK'
+      });
+      return;
+    }
+
+    const start = performance.now();
+    const res = shieldEngine.guard({
+      toolName: playToolName,
+      params: parsedParams,
+      sessionId: 'playground-session'
+    }, playPolicy);
+    const elapsed = performance.now() - start;
+
+    setEvalTimeMs(elapsed);
+    setPlaygroundResult(res);
+  };
+
   const triggerLiveSim = () => {
     const isThreat = Math.random() > 0.4;
     const newEvt: SecurityEvent = isThreat
@@ -103,7 +142,7 @@ export default function CleanSecurityDashboard() {
           </div>
           <div>
             <div className="font-bold text-base text-white tracking-tight flex items-center gap-2">
-              AgentShield <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">Production Control</span>
+              AgentShield <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">Production Control Plane</span>
             </div>
           </div>
         </div>
@@ -117,6 +156,14 @@ export default function CleanSecurityDashboard() {
             }`}
           >
             Live Telemetry Feed
+          </button>
+          <button
+            onClick={() => setActiveTab('playground')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
+              activeTab === 'playground' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Interactive Playground
           </button>
           <button
             onClick={() => setActiveTab('policies')}
@@ -246,7 +293,102 @@ export default function CleanSecurityDashboard() {
           </div>
         )}
 
-        {/* Tab 2: Policy Rules Config */}
+        {/* Tab 2: Interactive Playground */}
+        {activeTab === 'playground' && (
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 space-y-6">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Code className="w-4 h-4 text-emerald-400" /> Interactive Security Guardrail Playground
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">Test tool calls live in your browser against AgentShield's in-process evaluation engine.</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Input Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Tool Name</label>
+                  <input
+                    type="text"
+                    value={playToolName}
+                    onChange={(e) => setPlayToolName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">Tool Parameters (JSON)</label>
+                  <textarea
+                    rows={6}
+                    value={playParams}
+                    onChange={(e) => setPlayParams(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-emerald-400 font-mono focus:border-emerald-500 outline-none"
+                  />
+                </div>
+
+                <button
+                  onClick={handleRunPlayground}
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2"
+                >
+                  <Zap className="w-4 h-4 fill-current" /> Run AgentShield Inspection
+                </button>
+              </div>
+
+              {/* Live Inspection Result */}
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between font-mono text-xs">
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+                    <span className="text-slate-400 text-[11px]">Evaluation Output</span>
+                    {evalTimeMs !== null && (
+                      <span className="text-emerald-400 text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        ⚡ {evalTimeMs.toFixed(4)} ms
+                      </span>
+                    )}
+                  </div>
+
+                  {playgroundResult ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          playgroundResult.allowed 
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        }`}>
+                          {playgroundResult.allowed ? '✓ ALLOWED' : '❌ BLOCKED'}
+                        </span>
+                        <span className="text-slate-500 text-[11px]">{playgroundResult.actionTaken}</span>
+                      </div>
+
+                      {playgroundResult.reason && (
+                        <div className="p-3 bg-rose-950/30 border border-rose-900/40 rounded-lg text-rose-300">
+                          <div className="font-semibold mb-1">Reason:</div>
+                          <div>{playgroundResult.reason}</div>
+                        </div>
+                      )}
+
+                      {playgroundResult.remediation && (
+                        <div className="p-3 bg-cyan-950/30 border border-cyan-900/40 rounded-lg text-cyan-300">
+                          <div className="font-semibold mb-1">Suggested Remediation:</div>
+                          <div>{playgroundResult.remediation.suggestedFix}</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-slate-600 text-center py-12">
+                      Click "Run AgentShield Inspection" to evaluate payload.
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-[10px] text-slate-600 border-t border-slate-900 pt-2">
+                  Engine: BloomFilter + ASTLexical + InjectionSanitizer (In-Process)
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Policy Rules Config */}
         {activeTab === 'policies' && (
           <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 max-w-3xl mx-auto space-y-6">
             <div>

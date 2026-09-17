@@ -1,45 +1,64 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { AuditRecord } from './audit.js';
 
 export class PersistentStore {
   private filePath: string;
+  private inMemoryStore: AuditRecord[] = [];
 
   constructor(customPath?: string) {
-    const dir = customPath ? path.dirname(customPath) : path.join(process.cwd(), '.agentshield_data');
-    if (!fs.existsSync(dir)) {
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-      } catch {
-        // Fallback
+    this.filePath = customPath || '.agentshield_data/audit_store.json';
+    this.initStorage(customPath);
+  }
+
+  private initStorage(customPath?: string) {
+    if (typeof window !== 'undefined') return;
+    try {
+      // Universal Node check
+      const fs = typeof require !== 'undefined' ? require('fs') : null;
+      const path = typeof require !== 'undefined' ? require('path') : null;
+      if (fs && path) {
+        const dir = customPath ? path.dirname(customPath) : path.join(process.cwd(), '.agentshield_data');
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        this.filePath = customPath || path.join(dir, 'audit_store.json');
       }
+    } catch {
+      // Fallback to in-memory store
     }
-    this.filePath = customPath || path.join(dir, 'audit_store.json');
   }
 
   saveAuditRecord(record: AuditRecord): void {
+    if (typeof window !== 'undefined') {
+      this.inMemoryStore.push(record);
+      if (this.inMemoryStore.length > 1000) this.inMemoryStore.shift();
+      return;
+    }
     try {
-      const records = this.loadRecords();
-      records.push(record);
-      // Keep last 10,000 records on disk
-      if (records.length > 10000) {
-        records.shift();
+      const fs = typeof require !== 'undefined' ? require('fs') : null;
+      if (fs) {
+        const records = this.loadRecords();
+        records.push(record);
+        if (records.length > 10000) records.shift();
+        fs.writeFileSync(this.filePath, JSON.stringify(records, null, 2), 'utf-8');
+      } else {
+        this.inMemoryStore.push(record);
       }
-      fs.writeFileSync(this.filePath, JSON.stringify(records, null, 2), 'utf-8');
     } catch {
-      // Non-blocking disk write
+      this.inMemoryStore.push(record);
     }
   }
 
   loadRecords(): AuditRecord[] {
+    if (typeof window !== 'undefined') return this.inMemoryStore;
     try {
-      if (fs.existsSync(this.filePath)) {
+      const fs = typeof require !== 'undefined' ? require('fs') : null;
+      if (fs && fs.existsSync(this.filePath)) {
         const content = fs.readFileSync(this.filePath, 'utf-8');
         return JSON.parse(content);
       }
     } catch {
       // Fallback
     }
-    return [];
+    return this.inMemoryStore;
   }
 }
